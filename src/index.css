@@ -1,0 +1,80 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --green-dark: #0F6E56;
+  --green-mid: #1D9E75;
+  --green-light: #5DCAA5;
+  --green-pale: #E1F5EE;
+  --teal-dark: #085041;
+  --teal-accent: #04342C;
+  --surface: #ffffff;
+  --surface-alt: #f8faf9;
+  --border: rgba(15,110,86,0.13);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+  --radius: 12px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: #eef2f0;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(15,110,86,0.2); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(15,110,86,0.4); }
+
+/* Animations */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.fade-in { animation: fadeIn 0.22s ease both; }
+
+/* Landing screen animations */
+@keyframes landing-float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-18px); }
+}
+@keyframes landing-float-alt {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  33%       { transform: translateY(-12px) rotate(0.6deg); }
+  66%       { transform: translateY(-20px) rotate(-0.6deg); }
+}
+@keyframes orb-breathe {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50%       { opacity: 1; transform: scale(1.2); }
+}
+@keyframes landing-glow-pulse {
+  0%, 100% { box-shadow: 0 0 22px rgba(29,158,117,0.38), 0 6px 28px rgba(0,0,0,0.4); }
+  50%       { box-shadow: 0 0 42px rgba(29,158,117,0.65), 0 6px 28px rgba(0,0,0,0.4); }
+}
+@keyframes landing-fade-up {
+  from { opacity: 0; transform: translateY(30px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.landing-fade-up  { animation: landing-fade-up 0.75s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+.landing-glow-btn { animation: landing-glow-pulse 3s ease-in-out infinite; }
+
+.landing-card { display: none; }
+@media (min-width: 960px) { .landing-card { display: block; } }
+
+/* NexaCore chip */
+.nc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: 11.5px;
+  font-weight: 500;
+  background: var(--green-pale);
+  color: var(--green-dark);
+}

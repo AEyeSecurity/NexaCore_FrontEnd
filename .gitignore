@@ -1,0 +1,18 @@
+# Dependencias
+node_modules/
+*/node_modules/
+
+# Variables de entorno (nunca subir)
+.env
+*/.env
+
+# Build
+dist/
+build/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+.claude/
