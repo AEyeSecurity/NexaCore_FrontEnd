@@ -48,7 +48,7 @@ export default function Usuarios({ user }) {
   const [loading, setLoading]   = useState(true)
   const [openMenu, setOpenMenu] = useState(null)
   const [modal, setModal]       = useState(null) // null | 'nuevo' | usuario-object
-  const [form, setForm]         = useState({ email: '', nombre: '', rol_id: '', estado: 'Activo' })
+  const [form, setForm]         = useState({ email: '', nombre: '', rol_id: '', estado: 'Activo', password: '' })
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState(null)
 
@@ -83,7 +83,7 @@ export default function Usuarios({ user }) {
   useEffect(() => { cargar() }, [cargar])
 
   const abrirNuevo = () => {
-    setForm({ email: '', nombre: '', rol_id: roles[0]?.id || '', estado: 'Activo' })
+    setForm({ email: '', nombre: '', rol_id: roles[0]?.id || '', estado: 'Activo', password: '' })
     setError(null)
     setModal('nuevo')
   }
@@ -303,6 +303,13 @@ export default function Usuarios({ user }) {
                 <input type="email" value={form.email} onChange={e => set('email')(e.target.value)}
                   required className={inputCls} style={inputStyle} />
               </div>
+              {modal === 'nuevo' && (
+                <div>
+                  <label className="text-[11.5px] font-medium text-gray-500 mb-1.5 block">Contraseña *</label>
+                  <input type="password" value={form.password} onChange={e => set('password')(e.target.value)}
+                    required className={inputCls} style={inputStyle} />
+                </div>
+              )}
               <div>
                 <label className="text-[11.5px] font-medium text-gray-500 mb-1.5 block">Rol *</label>
                 <div className="relative">
