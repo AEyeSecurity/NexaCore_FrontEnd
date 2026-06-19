@@ -1,6 +1,6 @@
 import {
   TrendingUp, Briefcase, Users, Calendar,
-  BarChart2, Settings, UserCog,
+  BarChart2, Settings, UserCog, Building2,
   LayoutGrid, LogOut, Layers,
 } from 'lucide-react'
 import logoUrl from '../../resources/logo3.png'
@@ -13,9 +13,10 @@ const MODULES = [
 ]
 
 const SYSTEM_ITEMS = [
-  { id: 'reportes', label: 'Reportes',      icon: BarChart2 },
-  { id: 'usuarios', label: 'Usuarios',      icon: UserCog   },
-  { id: 'settings', label: 'Configuración', icon: Settings  },
+  { id: 'reportes',      label: 'Reportes',      icon: BarChart2  },
+  { id: 'usuarios',      label: 'Usuarios',      icon: UserCog    },
+  { id: 'organizacion',  label: 'Organización',  icon: Building2  },
+  { id: 'settings',      label: 'Configuración', icon: Settings   },
 ]
 
 const ROLE_PAGES = {
