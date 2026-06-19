@@ -193,4 +193,18 @@ export const api = {
   editarUsuario:  (id, body) => request(`/api/rbac/usuarios/${id}`, { method: 'PUT',    body: JSON.stringify(body) }),
   eliminarUsuario:(id)       => request(`/api/rbac/usuarios/${id}`, { method: 'DELETE' }),
   getRoles:              () => request('/api/rbac/roles'),
+
+  // ── Organización ──────────────────────────────────
+  getOrganigrama:       ()           => request('/api/organizacion/organigrama'),
+  crearNodoOrganigrama: (body)       => request('/api/organizacion/organigrama',      { method: 'POST',   body: JSON.stringify(body) }),
+  actualizarNodoOrganigrama: (id, body) => request(`/api/organizacion/organigrama/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  eliminarNodoOrganigrama:   (id)    => request(`/api/organizacion/organigrama/${id}`, { method: 'DELETE' }),
+
+  getPermisosUsuario:    (uid)       => request(`/api/organizacion/permisos/${uid}`),
+  actualizarPermisosUsuario: (uid, body) => request(`/api/organizacion/permisos/${uid}`, { method: 'PUT', body: JSON.stringify(body) }),
+
+  getMatrizPermisos:     ()          => request('/api/organizacion/matriz'),
+  getModulosOrganizacion:()          => request('/api/organizacion/modulos'),
+  getRolesPredefinidos:  ()          => request('/api/organizacion/roles-predefinidos'),
+  inactivarExpirados:    ()          => request('/api/organizacion/inactivar-expirados', { method: 'POST' }),
 }

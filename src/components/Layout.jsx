@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   LayoutDashboard, TrendingUp, Briefcase, Users, Calendar,
   BarChart2, Settings, Menu, X, ChevronLeft, ChevronRight,
-  Zap, UserCog, LogOut, Home,
+  Zap, UserCog, LogOut, Home, Building2,
 } from 'lucide-react'
 
 const NAV = [
@@ -16,18 +16,24 @@ const NAV = [
     { id: 'planification', label: 'Planificación', icon: Calendar   },
   ]},
   { section: 'SISTEMA', items: [
-    { id: 'reportes',  label: 'Reportes',      icon: BarChart2 },
-    { id: 'usuarios',  label: 'Usuarios',      icon: UserCog   },
-    { id: 'settings',  label: 'Configuración', icon: Settings  },
+    { id: 'reportes',       label: 'Reportes',      icon: BarChart2  },
+    { id: 'usuarios',       label: 'Usuarios',      icon: UserCog    },
+    { id: 'organizacion',   label: 'Organización',  icon: Building2  },
+    { id: 'settings',       label: 'Configuración', icon: Settings   },
   ]},
 ]
 
 const ROLE_PAGES = {
   'Superadmin': null,
   'Dirección':  null,
+  'Director':   null,
   'Operativo':  ['operations'],
   'Contable':   ['finance', 'reportes'],
   'Comercial':  ['crm', 'planification'],
+  'Mando Medio': ['dashboard', 'operations', 'crm', 'planification'],
+  'Operario':    ['dashboard', 'operations'],
+  'Auditor / Lector': ['dashboard', 'finance', 'operations', 'crm', 'planification', 'reportes'],
+  'Externo':     ['dashboard'],
 }
 
 const MODULE_LABELS = {
@@ -38,6 +44,7 @@ const MODULE_LABELS = {
   planification: 'Módulo de Planificación',
   reportes:      'Reportes',
   usuarios:      'Gestión de usuarios',
+  organizacion:  'Organización y Permisos',
   settings:      'Configuración',
 }
 

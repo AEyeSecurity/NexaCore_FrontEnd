@@ -10,6 +10,7 @@ import OperationsModule from './modules/operations/OperationsModule'
 import CrmModule from './modules/crm/CrmModule'
 import PlanificationModule from './modules/planification/PlanificationModule'
 import Usuarios from './components/Usuarios'
+import OrganizationModule from './modules/organization/OrganizationModule'
 import AuthCallback from './components/AuthCallback'
 
 function ComingSoon({ title }) {
@@ -122,6 +123,7 @@ export default function App() {
       {page === 'planification' && <PlanificationModule />}
       {page === 'reportes'      && <ComingSoon title="Reportes" />}
       {page === 'usuarios'      && <Usuarios user={user} />}
+      {page === 'organizacion'  && <OrganizationModule user={user} />}
       {page === 'settings'      && <ComingSoon title="Configuración" />}
     </Layout>
   )
