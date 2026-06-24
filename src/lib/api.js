@@ -85,6 +85,14 @@ export const api = {
   importarExcel: (formData) => requestMultipart('/api/finance/excel/importar', 'POST', formData),
   getPlantillaInfo: () => request('/api/finance/excel/plantilla'),
 
+  // ── Migración de datos ────────────────────────────
+  getMigracionTipos: () => request('/api/finance/migracion/tipos'),
+  previewMigracion:  (formData) => requestMultipart('/api/finance/migracion/preview',    'POST', formData),
+  confirmarMigracion:(formData) => requestMultipart('/api/finance/migracion/confirmar',  'POST', formData),
+  getMigracionBatches: () => request('/api/finance/migracion/batches'),
+  getMigracionBatch:   (id) => request(`/api/finance/migracion/batches/${id}`),
+  revertirMigracion:   (id) => request(`/api/finance/migracion/batches/${id}/revertir`, { method: 'POST' }),
+
   // ── Deudas ───────────────────────────────────────
   getDeudas: (params = {}) => {
     const qs = new URLSearchParams(
