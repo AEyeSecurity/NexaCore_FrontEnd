@@ -136,6 +136,25 @@ const TIPOS = [
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+// Garantiza YYYY-MM-DD sin importar cómo el browser serializa el input type=date.
+// Acepta YYYY-MM-DD (pasa directo) o DD/MM/YYYY (invierte los bloques).
+function normalizarFecha(valor) {
+  if (!valor) return valor
+  if (/^\d{4}-\d{2}-\d{2}$/.test(valor)) return valor
+  const m = valor.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`
+  return valor
+}
+
+const CAMPOS_FECHA = ['fecha_global', 'fecha_imputacion']
+
+function appendParams(fd, params) {
+  Object.entries(params).forEach(([k, v]) => {
+    if (!v) return
+    fd.append(k, CAMPOS_FECHA.includes(k) ? normalizarFecha(v) : v)
+  })
+}
+
 function fmtFecha(iso) {
   if (!iso) return '—'
   try {
@@ -217,7 +236,8 @@ export default function ImportarExcel() {
       const fd = new FormData()
       fd.append('archivo', archivo)
       fd.append('tipo_migracion', tipo.backendId)
-      Object.entries(params).forEach(([k, v]) => { if (v) fd.append(k, v) })
+      appendParams(fd, params)
+      console.log('[MigracionFormData] preview:', Object.fromEntries(fd.entries()))
       const res = await api.previewMigracion(fd)
       console.log('[MigracionPreview] response:', JSON.stringify(res, null, 2))
       setPreviewData(res)
@@ -236,7 +256,8 @@ export default function ImportarExcel() {
       const fd = new FormData()
       fd.append('archivo', archivo)
       fd.append('tipo_migracion', tipo.backendId)
-      Object.entries(params).forEach(([k, v]) => { if (v) fd.append(k, v) })
+      appendParams(fd, params)
+      console.log('[MigracionFormData] confirmar:', Object.fromEntries(fd.entries()))
       const res = await api.confirmarMigracion(fd)
       console.log('[MigracionConfirmar]', res)
       setResultado(res)
