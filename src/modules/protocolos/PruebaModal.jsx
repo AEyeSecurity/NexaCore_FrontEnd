@@ -17,9 +17,8 @@ function today() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export default function PruebaModal({ protocolo, onClose, onSaved, defaultRealizadoPor }) {
+export default function PruebaModal({ protocolo, onClose, onSaved }) {
   const items = protocolo.items ?? []
-  const [realizadoPor, setRealizadoPor] = useState(defaultRealizadoPor ?? '')
   const [fecha, setFecha] = useState(today())
   const [respuestas, setRespuestas] = useState({})
   const [observaciones, setObservaciones] = useState('')
@@ -42,10 +41,8 @@ export default function PruebaModal({ protocolo, onClose, onSaved, defaultRealiz
         item_id: it.id,
         texto: it.texto,
         estado: respuestas[it.id].estado,
-        nota: respuestas[it.id].nota?.trim() || undefined,
       }))
       await protocolosApi.registrarPrueba(protocolo.id, {
-        realizado_por: realizadoPor.trim() || undefined,
         fecha,
         resultados,
         observaciones: observaciones.trim() || undefined,
@@ -68,16 +65,9 @@ export default function PruebaModal({ protocolo, onClose, onSaved, defaultRealiz
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[11.5px] font-medium text-gray-500 mb-1.5 block">Realizado por</label>
-            <input type="text" value={realizadoPor} onChange={e => setRealizadoPor(e.target.value)}
-              placeholder="Nombre del responsable" className={inputCls} style={inputStyle} />
-          </div>
-          <div>
-            <label className="text-[11.5px] font-medium text-gray-500 mb-1.5 block">Fecha</label>
-            <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} className={inputCls} style={inputStyle} />
-          </div>
+        <div>
+          <label className="text-[11.5px] font-medium text-gray-500 mb-1.5 block">Fecha</label>
+          <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} className={inputCls} style={inputStyle} />
         </div>
 
         <div className="space-y-3">
@@ -86,7 +76,7 @@ export default function PruebaModal({ protocolo, onClose, onSaved, defaultRealiz
             return (
               <div key={it.id} className="border rounded-xl p-4" style={{ borderColor: 'rgba(15,110,86,0.15)' }}>
                 <p className="text-[13.5px] font-semibold text-gray-800 mb-2.5">{i + 1}. {it.texto}</p>
-                <div className="flex gap-2 mb-2.5">
+                <div className="flex gap-2">
                   {ESTADOS_ITEM.map(op => (
                     <button key={op.value} onClick={() => setRespuesta(it.id, { estado: op.value })}
                       className="flex-1 py-2 rounded-lg text-[12.5px] font-medium border transition-all"
@@ -95,9 +85,6 @@ export default function PruebaModal({ protocolo, onClose, onSaved, defaultRealiz
                     </button>
                   ))}
                 </div>
-                <input type="text" value={r.nota ?? ''} onChange={e => setRespuesta(it.id, { nota: e.target.value })}
-                  placeholder="Observación / dato registrado (opcional)"
-                  className="w-full border rounded-lg px-3 py-1.5 text-[12.5px] outline-none bg-white" style={inputStyle} />
               </div>
             )
           })}
@@ -109,7 +96,10 @@ export default function PruebaModal({ protocolo, onClose, onSaved, defaultRealiz
         <div>
           <label className="text-[11.5px] font-medium text-gray-500 mb-1.5 block">Observaciones generales</label>
           <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)}
-            rows={2} placeholder="Notas adicionales de la prueba..." className={inputCls + ' resize-none'} style={inputStyle} />
+            rows={3} maxLength={300}
+            placeholder="Agregar un comentario general de la prueba (opcional)"
+            className={inputCls + ' resize-none'} style={inputStyle} />
+          <p className="text-right text-[11px] text-gray-400 mt-1">{observaciones.length}/300</p>
         </div>
 
         {error && <div className="p-3 rounded-xl text-[13px] text-red-600 bg-red-50">{error}</div>}

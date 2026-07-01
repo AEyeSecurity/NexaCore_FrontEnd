@@ -12,7 +12,7 @@ function formatFecha(fechaStr) {
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-export default function ProtocolosDetail({ protocoloId, user, onBack, onOpenPrueba }) {
+export default function ProtocolosDetail({ protocoloId, onBack, onOpenPrueba }) {
   const [protocolo, setProtocolo] = useState(null)
   const [pruebas, setPruebas] = useState([])
   const [loading, setLoading] = useState(true)
@@ -130,7 +130,7 @@ export default function ProtocolosDetail({ protocoloId, user, onBack, onOpenPrue
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b bg-gray-50/60" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
-                {['FECHA', 'REALIZADO POR', 'RESULTADO', 'CUMPLIMIENTO', ''].map(h => (
+                {['FECHA', 'RESULTADO', 'CUMPLIMIENTO', 'COMENTARIOS', ''].map(h => (
                   <th key={h} className="text-left py-3 px-5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
@@ -140,17 +140,22 @@ export default function ProtocolosDetail({ protocoloId, user, onBack, onOpenPrue
                 const resultados = Array.isArray(p.resultados) ? p.resultados : []
                 const okCount = resultados.filter(r => r.estado === 'ok').length
                 const failCount = resultados.filter(r => r.estado === 'fail').length
+                const comentario = p.observaciones
+                  ? (p.observaciones.length > 55 ? p.observaciones.slice(0, 55) + '…' : p.observaciones)
+                  : 'Sin comentarios'
                 return (
                   <tr key={p.id} className="border-b hover:bg-gray-50/50 transition-colors" style={{ borderColor: 'rgba(15,110,86,0.06)' }}>
                     <td className="py-3.5 px-5 font-medium text-gray-700">{formatFecha(p.fecha)}</td>
-                    <td className="py-3.5 px-5 text-gray-500">{p.realizado_por || '—'}</td>
+                    <td className="py-3.5 px-5 text-gray-500">{okCount}/{resultados.length} ítems OK</td>
                     <td className="py-3.5 px-5">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11.5px] font-semibold"
                         style={failCount > 0 ? { background: '#FEE2E2', color: '#B91C1C' } : { background: '#E1F5EE', color: '#0F6E56' }}>
                         {failCount > 0 ? 'Con incumplimientos' : 'Cumplido'}
                       </span>
                     </td>
-                    <td className="py-3.5 px-5 text-gray-500">{okCount}/{resultados.length} ítems OK</td>
+                    <td className="py-3.5 px-5 text-gray-400 text-[12.5px] max-w-[200px]">
+                      <span className="block truncate">{comentario}</span>
+                    </td>
                     <td className="py-3.5 px-5 text-right">
                       <button onClick={() => onOpenPrueba(p.id)}
                         className="text-[12.5px] font-semibold" style={{ color: '#3B6FD6' }}>
@@ -182,7 +187,6 @@ export default function ProtocolosDetail({ protocoloId, user, onBack, onOpenPrue
       {showPrueba && (
         <PruebaModal
           protocolo={protocolo}
-          defaultRealizadoPor={user?.name}
           onClose={() => setShowPrueba(false)}
           onSaved={() => { setShowPrueba(false); cargar() }}
         />
