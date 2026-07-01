@@ -19,7 +19,7 @@ const TIPOS = [
     color: '#DC2626',
     bg: '#FEF2F2',
     borde: '#FECACA',
-    descripcion: 'Importá gastos mensuales históricos desde planillas tipo "Gastos Mensuales".',
+    // descripcion: 'Importá gastos mensuales históricos desde planillas tipo "Gastos Mensuales".',
     destino: 'Gastos / Movimientos financieros',
     columnas: [
       { nombre: 'Nombre',      obligatoria: true,  desc: 'Nombre del gasto o ítem' },
@@ -43,7 +43,7 @@ const TIPOS = [
     color: '#7C3AED',
     bg: '#F5F3FF',
     borde: '#DDD6FE',
-    descripcion: 'Importá compras internacionales o inversiones desde planillas tipo "Compras China".',
+    // descripcion: 'Importá compras internacionales o inversiones desde planillas tipo "Compras China".',
     destino: 'Inversiones',
     columnas: [
       { nombre: 'Nombre',      obligatoria: true,  desc: 'Nombre del producto o inversión' },
@@ -67,7 +67,7 @@ const TIPOS = [
     color: '#D97706',
     bg: '#FFFBEB',
     borde: '#FDE68A',
-    descripcion: 'Importá cuentas pendientes de cobro desde planillas tipo "Por Cobrar".',
+    // descripcion: 'Importá cuentas pendientes de cobro desde planillas tipo "Por Cobrar".',
     destino: 'Cuentas por cobrar / CRM',
     columnas: [
       { nombre: 'Nombre',      obligatoria: true,  desc: 'Nombre del cliente o deudor' },
@@ -89,7 +89,7 @@ const TIPOS = [
     color: '#059669',
     bg: '#ECFDF5',
     borde: '#A7F3D0',
-    descripcion: 'Importá un resumen financiero histórico para conciliación y auditoría interna.',
+    // descripcion: 'Importá un resumen financiero histórico para conciliación y auditoría interna.',
     destino: 'Conciliación / Auditoría',
     columnas: [
       { nombre: 'Total gastos mensuales',        obligatoria: false, desc: 'Suma de todos los gastos del período' },
@@ -478,9 +478,6 @@ function SeccionSeleccion({ onSeleccionar }) {
           </div>
           <div>
             <h2 className="font-semibold text-gray-900">¿Qué tipo de datos querés migrar?</h2>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Elegí el tipo de planilla que vas a importar. Cada tipo tiene su propio formato y destino en el sistema.
-            </p>
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
