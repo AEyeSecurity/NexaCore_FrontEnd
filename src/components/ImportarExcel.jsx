@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Upload, CheckCircle, XCircle, AlertCircle, RefreshCw,
   ChevronLeft, History, RotateCcw, TrendingDown, ShoppingBag,
-  Users, DollarSign, BarChart2, Info, Calendar, Tag,
+  DollarSign, BarChart2, Info, Calendar, Tag,
   FileSpreadsheet, ChevronRight, Clock, Trash2
 } from 'lucide-react'
 import { api } from '../lib/api'
@@ -58,32 +58,6 @@ const TIPOS = [
       'Si el archivo no trae fecha, podés indicar una fecha global.',
     ],
     extras: ['fecha_global'],
-  },
-  {
-    id: 'sueldos',
-    backendId: 'SUELDOS_HISTORICOS',
-    label: 'Sueldos históricos',
-    icono: Users,
-    color: '#0369A1',
-    bg: '#F0F9FF',
-    borde: '#BAE6FD',
-    descripcion: 'Importá sueldos históricos consolidados por mes desde planillas tipo "Sueldos".',
-    destino: 'Sueldos históricos / Movimientos RRHH',
-    columnas: [
-      { nombre: 'Mes',         obligatoria: true,  desc: 'Período (MM/YYYY o nombre del mes)' },
-      { nombre: 'Fijo USD',    obligatoria: false, desc: 'Monto fijo en dólares' },
-      { nombre: 'Fijo Pesos',  obligatoria: false, desc: 'Monto fijo en pesos' },
-      { nombre: 'Pasantes',    obligatoria: false, desc: 'Total pagado a pasantes' },
-      { nombre: 'Polo Pasan',  obligatoria: false, desc: 'Total Polo Pasante' },
-      { nombre: 'Por Hora',    obligatoria: false, desc: 'Total pagado por hora' },
-      { nombre: 'Total Pesos', obligatoria: true,  desc: 'Total mensual en pesos' },
-      { nombre: 'Total USD',   obligatoria: false, desc: 'Total mensual en dólares' },
-    ],
-    advertencias: [
-      'Estos datos son totales mensuales consolidados, NO empleados individuales.',
-      'Cada fila representa el gasto total de sueldos de un mes completo.',
-    ],
-    extras: ['consolidado'],
   },
   {
     id: 'cobrar',
@@ -168,6 +142,50 @@ function fmtNum(n) {
   return new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 }).format(n ?? 0)
 }
 
+const CAMPOS_MONETARIOS = new Set([
+  'monto', 'total', 'total_pesos', 'total_usd', 'monto_pesos', 'monto_usd',
+  'saldo', 'entregado', 'pendiente', 'pagos', 'pago', 'precio', 'importe',
+  'valor', 'costo', 'costo_total', 'subtotal', 'neto', 'bruto', 'ingreso', 'egreso',
+])
+
+function fmtMoneda(v) {
+  const n = typeof v === 'number' ? v : Number(v)
+  if (!isFinite(n)) return v
+  return new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 }).format(n)
+}
+
+// Formatea el valor de una celda de preview:
+// - campos con nombre monetario → máx 2 decimales
+// - cualquier número no entero  → máx 2 decimales (evita floats largos de cualquier campo)
+// - el resto                    → sin cambios
+function fmtCelda(k, v) {
+  if (v == null) return null
+  const n = typeof v === 'number' ? v : (typeof v === 'string' ? Number(v) : NaN)
+  if (!isFinite(n)) return v
+  const kNorm = String(k).toLowerCase().replace(/[\s-]+/g, '_')
+  const esMonetario = CAMPOS_MONETARIOS.has(kNorm)
+    || /total|monto|pesos|usd|saldo|entregado|pendiente|pago|precio|importe|valor|costo|neto|bruto/.test(kNorm)
+  if (esMonetario || !Number.isInteger(n)) return fmtMoneda(n)
+  return v
+}
+
+// Normaliza cualquier formato de error del backend a { fila, texto }.
+// Soporta: objeto estructurado, string plano y string JSON.
+function parsearError(raw) {
+  let obj = raw
+  if (typeof raw === 'string') {
+    try { obj = JSON.parse(raw) } catch { return { fila: null, texto: raw.trim() || 'Error desconocido' } }
+  }
+  if (obj == null || typeof obj !== 'object') {
+    return { fila: null, texto: String(obj ?? 'Error desconocido') }
+  }
+  const fila   = obj.fila ?? obj.row ?? obj.fila_numero ?? null
+  const campo  = obj.campo ?? obj.field ?? obj.columna ?? null
+  const motivo = obj.motivo ?? obj.mensaje ?? obj.message ?? obj.error ?? obj.description ?? null
+  const texto  = motivo ?? (campo ? `Error en el campo "${campo}"` : 'Error desconocido')
+  return { fila, texto }
+}
+
 const inputCls = `w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13.5px] outline-none bg-white transition-colors focus:border-teal-700 focus:ring-2 focus:ring-teal-700/10`
 const labelCls = `block text-[12px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5`
 
@@ -212,7 +230,11 @@ export default function ImportarExcel() {
   const seleccionarTipo = (id) => {
     setTipoId(id)
     setArchivo(null)
-    setParams({})
+    const tipoData = TIPOS.find(t => t.id === id)
+    const defaultParams = tipoData?.extras.includes('categoria_defecto')
+      ? { categoria_defecto: 'Otros' }
+      : {}
+    setParams(defaultParams)
     setPreviewData(null)
     setResultado(null)
     setErrMsg(null)
@@ -384,12 +406,12 @@ export default function ImportarExcel() {
         />
       )}
 
-      {/* ── Historial de migraciones ── */}
-      <SeccionHistorial
+      {/* ── Historial de migraciones (oculto temporalmente) ── */}
+      {/* <SeccionHistorial
         historial={historial}
         cargando={cargandoHistorial}
         onRevertir={(id) => setModalRevertir(id)}
-      />
+      /> */}
 
       {/* ── Modal de confirmación de reversión ── */}
       {modalRevertir && (
@@ -461,7 +483,7 @@ function SeccionSeleccion({ onSeleccionar }) {
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {TIPOS.map(t => {
             const Icono = t.icono
             return (
@@ -589,9 +611,8 @@ function SeccionConfig({ tipo, archivo, fileRef, params, setParams, errMsg, onAr
                   Categoría por defecto
                 </label>
                 <select className={inputCls}
-                  value={params.categoria_defecto ?? ''}
+                  value={params.categoria_defecto ?? 'Otros'}
                   onChange={e => set('categoria_defecto', e.target.value)}>
-                  <option value="">Sin categoría por defecto</option>
                   <option value="Tecnología">Tecnología</option>
                   <option value="RRHH">RRHH</option>
                   <option value="Insumos">Insumos</option>
@@ -612,17 +633,6 @@ function SeccionConfig({ tipo, archivo, fileRef, params, setParams, errMsg, onAr
                   value={params.fecha_global ?? ''}
                   onChange={e => set('fecha_global', e.target.value)} />
                 <p className="text-[11px] text-gray-400 mt-1">Se usa si el archivo no trae fecha de compra en cada fila.</p>
-              </div>
-            )}
-            {tipo.extras.includes('consolidado') && (
-              <div className="flex items-start gap-3 p-3 rounded-xl bg-blue-50 border border-blue-100">
-                <input type="checkbox" id="consolidado" className="mt-0.5 accent-teal-700"
-                  checked={params.consolidado === 'true'}
-                  onChange={e => set('consolidado', e.target.checked ? 'true' : '')} />
-                <label htmlFor="consolidado" className="text-[13px] text-gray-700 cursor-pointer">
-                  <span className="font-medium">Importar como consolidado mensual</span>
-                  <p className="text-[11.5px] text-gray-500 mt-0.5">Cada fila representa el total de sueldos de un mes, no un empleado individual.</p>
-                </label>
               </div>
             )}
           </div>
@@ -688,14 +698,39 @@ function SeccionConfig({ tipo, archivo, fileRef, params, setParams, errMsg, onAr
 // ─── Preview ─────────────────────────────────────────────────────────────────
 
 function SeccionPreview({ tipo, previewData, errMsg, onVolver, onConfirmar }) {
-  // Mapeo explícito al contrato real del backend
-  const filas        = previewData?.preview ?? previewData?.filas ?? previewData?.rows ?? []
-  const totalFilas   = previewData?.filas_total ?? previewData?.total ?? filas.length
-  const filasValidas = previewData?.registros_validos ?? previewData?.validas ?? filas.filter(f => f.valida !== false && !f.error).length
-  const filasError   = previewData?.registros_rechazados ?? previewData?.errores_count ?? filas.filter(f => f.valida === false || f.error).length
-  // errores: array de objetos con detalle por fila (puede ser array o número según backend)
+  // rawFilas puede ser un array de filas, un número (conteo) o undefined según el tipo de migración
+  const rawFilas     = previewData?.preview ?? previewData?.filas ?? previewData?.rows
+  // Garantizar que filas siempre sea un array — evita crashes cuando el backend devuelve un número o null
+  const filas        = Array.isArray(rawFilas) ? rawFilas : []
+  const totalFilas   = previewData?.filas_total ?? previewData?.total
+    ?? (typeof rawFilas === 'number' ? rawFilas : filas.length)
+  const filasValidas = previewData?.registros_validos ?? previewData?.validas
+    ?? filas.filter(f => f?.valida !== false && !f?.error).length
+  const filasError   = previewData?.registros_rechazados ?? previewData?.errores_count
+    ?? filas.filter(f => f?.valida === false || !!f?.error).length
   const erroresDetalle = Array.isArray(previewData?.errores) ? previewData.errores : []
   const puedeImportar  = filasValidas > 0
+
+  // Normalizar y agrupar errores por fila para mostrarlos de forma legible
+  const erroresAgrupados = (() => {
+    const todos = [
+      ...erroresDetalle.map(e => parsearError(e)),
+      ...filas
+        .filter(f => f?.error)
+        .map(f => {
+          const p = parsearError(f.error)
+          return { fila: p.fila ?? f._fila ?? f.fila ?? null, texto: p.texto }
+        }),
+    ]
+    const grupos = []
+    const idx = {}
+    todos.forEach(({ fila, texto }) => {
+      const key = fila != null ? String(fila) : '__'
+      if (idx[key] == null) { idx[key] = grupos.length; grupos.push({ fila, mensajes: [] }) }
+      grupos[idx[key]].mensajes.push(texto)
+    })
+    return grupos
+  })()
 
   const Icono = tipo.icono
 
@@ -727,6 +762,18 @@ function SeccionPreview({ tipo, previewData, errMsg, onVolver, onConfirmar }) {
             <p className="text-[12.5px] text-amber-800">
               {filasError} {filasError === 1 ? 'fila tiene errores' : 'filas tienen errores'} y {filasError === 1 ? 'será omitida' : 'serán omitidas'} en la importación.
               {puedeImportar ? ' Podés importar solo las válidas.' : ' No hay filas válidas para importar.'}
+            </p>
+          </div>
+        )}
+
+        {/* Totales financieros: no genera filas tabulares, mostrar resumen de lectura */}
+        {filas.length === 0 && filasValidas > 0 && (
+          <div className="flex items-start gap-2 p-3 rounded-xl border mb-4"
+            style={{ background: tipo.bg, borderColor: tipo.borde }}>
+            <CheckCircle size={15} className="flex-shrink-0 mt-0.5" style={{ color: tipo.color }} />
+            <p className="text-[12.5px]" style={{ color: tipo.color }}>
+              Archivo leído correctamente. Se detectaron <strong>{fmtNum(filasValidas)}</strong> registro{filasValidas !== 1 ? 's' : ''} válido{filasValidas !== 1 ? 's' : ''}.
+              Confirmá para procesar la migración.
             </p>
           </div>
         )}
@@ -766,11 +813,14 @@ function SeccionPreview({ tipo, previewData, errMsg, onVolver, onConfirmar }) {
                       {Object.entries(fila)
                         .filter(([k]) => k !== 'valida' && k !== 'error' && k !== '_fila')
                         .slice(0, 6)
-                        .map(([k, v]) => (
-                          <td key={k} className="py-2 px-3 text-gray-700 truncate max-w-[140px]">
-                            {v ?? <span className="text-gray-300">—</span>}
-                          </td>
-                        ))}
+                        .map(([k, v]) => {
+                          const display = fmtCelda(k, v)
+                          return (
+                            <td key={k} className="py-2 px-3 text-gray-700 truncate max-w-[140px]">
+                              {display ?? <span className="text-gray-300">—</span>}
+                            </td>
+                          )
+                        })}
                     </tr>
                   )
                 })}
@@ -784,25 +834,26 @@ function SeccionPreview({ tipo, previewData, errMsg, onVolver, onConfirmar }) {
           </div>
         )}
 
-        {/* Errores detallados — usa el array errores del backend si existe,
-            o cae a las filas con campo error embebido */}
-        {(erroresDetalle.length > 0 || filas.filter(f => f.error).length > 0) && (
-          <div className="mt-3 p-3 bg-red-50 rounded-xl border border-red-100 max-h-36 overflow-y-auto space-y-1">
-            <p className="text-[11.5px] font-semibold text-red-700 mb-1">
-              <AlertCircle size={11} className="inline mr-1" /> Detalle de errores
+        {/* Errores detallados — agrupados por fila, sin JSON crudo */}
+        {erroresAgrupados.length > 0 && (
+          <div className="mt-3 p-3 bg-red-50 rounded-xl border border-red-100 max-h-44 overflow-y-auto">
+            <p className="text-[11.5px] font-semibold text-red-700 mb-2 flex items-center gap-1">
+              <AlertCircle size={11} className="inline" /> Detalle de errores
             </p>
-            {erroresDetalle.length > 0
-              ? erroresDetalle.map((e, i) => (
-                  <p key={i} className="text-[11.5px] text-red-600">
-                    • {e.fila != null ? `Fila ${e.fila}: ` : ''}{e.mensaje ?? e.error ?? e.message ?? JSON.stringify(e)}
-                  </p>
-                ))
-              : filas.filter(f => f.error).map((f, i) => (
-                  <p key={i} className="text-[11.5px] text-red-600">
-                    • Fila {f._fila ?? f.fila ?? '?'}: {f.error}
-                  </p>
-                ))
-            }
+            <div className="space-y-2">
+              {erroresAgrupados.map((grupo, i) => (
+                <div key={i}>
+                  {grupo.fila != null && (
+                    <p className="text-[11.5px] font-semibold text-red-700">Fila {grupo.fila}</p>
+                  )}
+                  {grupo.mensajes.map((msg, j) => (
+                    <p key={j} className={`text-[11.5px] text-red-600 ${grupo.fila != null ? 'pl-2' : ''}`}>
+                      • {msg}
+                    </p>
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
