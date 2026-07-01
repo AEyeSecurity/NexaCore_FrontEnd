@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   LayoutDashboard, TrendingUp, Briefcase, Users, Calendar,
   BarChart2, Settings, Menu, X, ChevronLeft, ChevronRight,
-  Zap, UserCog, LogOut, Home, Building2,
+  Zap, UserCog, LogOut, Home, Building2, ClipboardCheck,
 } from 'lucide-react'
 
 const NAV = [
@@ -14,6 +14,7 @@ const NAV = [
     { id: 'operations',    label: 'Operativo',     icon: Briefcase  },
     { id: 'crm',           label: 'CRM',           icon: Users      },
     { id: 'planification', label: 'Planificación', icon: Calendar   },
+    { id: 'protocolos',    label: 'Protocolos',    icon: ClipboardCheck },
   ]},
   { section: 'SISTEMA', items: [
     { id: 'reportes',       label: 'Reportes',      icon: BarChart2  },
@@ -42,6 +43,7 @@ const MODULE_LABELS = {
   operations:    'Módulo Operativo',
   crm:           'CRM — Contactos y Clientes',
   planification: 'Módulo de Planificación',
+  protocolos:    'Protocolos',
   reportes:      'Reportes',
   usuarios:      'Gestión de usuarios',
   organizacion:  'Organización y Permisos',

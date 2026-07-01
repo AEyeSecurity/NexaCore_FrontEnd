@@ -215,4 +215,21 @@ export const api = {
   getModulosOrganizacion:()          => request('/api/organizacion/modulos'),
   getRolesPredefinidos:  ()          => request('/api/organizacion/roles-predefinidos'),
   inactivarExpirados:    ()          => request('/api/organizacion/inactivar-expirados', { method: 'POST' }),
+
+  // ── Protocolos ───────────────────────────────────
+  getProtocolos: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([, v]) => v))
+    ).toString()
+    return request(`/api/protocolos${qs ? `?${qs}` : ''}`)
+  },
+  getMetricasProtocolos: () => request('/api/protocolos/metrics'),
+  getProtocolo: (id) => request(`/api/protocolos/${id}`),
+  crearProtocolo:  (body)     => request('/api/protocolos',      { method: 'POST', body: JSON.stringify(body) }),
+  editarProtocolo: (id, body) => request(`/api/protocolos/${id}`, { method: 'PUT',  body: JSON.stringify(body) }),
+  guardarItemsProtocolo: (id, items) => request(`/api/protocolos/${id}/items`, { method: 'PUT', body: JSON.stringify({ items }) }),
+
+  registrarPruebaProtocolo: (id, body) => request(`/api/protocolos/${id}/pruebas`, { method: 'POST', body: JSON.stringify(body) }),
+  getPruebasProtocolo:      (id)       => request(`/api/protocolos/${id}/pruebas`),
+  getPrueba: (pruebaId) => request(`/api/protocolos/pruebas/${pruebaId}`),
 }

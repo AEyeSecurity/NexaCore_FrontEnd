@@ -1,7 +1,7 @@
 import {
   TrendingUp, Briefcase, Users, Calendar,
   BarChart2, Settings, UserCog, Building2,
-  LayoutGrid, LogOut, Layers,
+  LayoutGrid, LogOut, Layers, ClipboardCheck,
 } from 'lucide-react'
 import logoUrl from '../../resources/logo3.png'
 
@@ -10,6 +10,7 @@ const MODULES = [
   { id: 'operations',    label: 'Operativo',      icon: Briefcase },
   { id: 'crm',           label: 'CRM',            icon: Users },
   { id: 'planification', label: 'Planificación',  icon: Calendar },
+  { id: 'protocolos',    label: 'Protocolos',     icon: ClipboardCheck },
 ]
 
 const SYSTEM_ITEMS = [
