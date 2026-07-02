@@ -4,7 +4,8 @@ node_modules/
 
 # Variables de entorno (nunca subir)
 .env
-*/.env
+.env.*
+!.env.example
 
 # Build
 dist/
