@@ -139,26 +139,23 @@ export default function ProtocolosDetail({ protocoloId, onBack, onOpenPrueba }) 
               {pruebas.map(p => {
                 const resultados = Array.isArray(p.resultados) ? p.resultados : []
                 const okCount = resultados.filter(r => r.estado === 'ok').length
-                const failCount = resultados.filter(r => r.estado === 'fail').length
-                const comentario = p.observaciones
-                  ? (p.observaciones.length > 55 ? p.observaciones.slice(0, 55) + '…' : p.observaciones)
-                  : 'Sin comentarios'
                 return (
                   <tr key={p.id} className="border-b hover:bg-gray-50/50 transition-colors" style={{ borderColor: 'rgba(15,110,86,0.06)' }}>
-                    <td className="py-3.5 px-5 font-medium text-gray-700">{formatFecha(p.fecha)}</td>
-                    <td className="py-3.5 px-5 text-gray-500">{okCount}/{resultados.length} ítems OK</td>
-                    <td className="py-3.5 px-5">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11.5px] font-semibold"
-                        style={failCount > 0 ? { background: '#FEE2E2', color: '#B91C1C' } : { background: '#E1F5EE', color: '#0F6E56' }}>
-                        {failCount > 0 ? 'Con incumplimientos' : 'Cumplido'}
+                    <td className="py-3.5 px-5 font-medium text-gray-700 align-top whitespace-nowrap">{formatFecha(p.fecha)}</td>
+                    <td className="py-3.5 px-5 text-gray-700 text-[13px] align-top" style={{ maxWidth: '300px' }}>
+                      <span className="block break-words whitespace-pre-wrap">
+                        {p.resultado_texto || 'Sin resultados cargados'}
                       </span>
                     </td>
-                    <td className="py-3.5 px-5 text-gray-400 text-[12.5px] max-w-[200px]">
-                      <span className="block truncate">{comentario}</span>
+                    <td className="py-3.5 px-5 text-gray-500 align-top whitespace-nowrap">{okCount}/{resultados.length} ítems OK</td>
+                    <td className="py-3.5 px-5 text-gray-400 text-[12.5px] align-top" style={{ maxWidth: '250px' }}>
+                      <span className="block break-words whitespace-pre-wrap">
+                        {p.observaciones || 'Sin observaciones'}
+                      </span>
                     </td>
-                    <td className="py-3.5 px-5 text-right">
+                    <td className="py-3.5 px-5 text-right align-top">
                       <button onClick={() => onOpenPrueba(p.id)}
-                        className="text-[12.5px] font-semibold" style={{ color: '#3B6FD6' }}>
+                        className="text-[12.5px] font-semibold whitespace-nowrap" style={{ color: '#3B6FD6' }}>
                         Ver reporte →
                       </button>
                     </td>

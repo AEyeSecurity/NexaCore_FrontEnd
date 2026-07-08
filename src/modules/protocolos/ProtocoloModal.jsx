@@ -45,11 +45,16 @@ export default function ProtocoloModal({ protocolo, onClose, onSaved }) {
         await protocolosApi.editar(protocolo.id, body)
         await protocolosApi.guardarItems(protocolo.id, items)
       } else {
-        await protocolosApi.crear({ ...body, items })
+        await protocolosApi.crear({ ...body, items: items.map(i => i.texto) })
       }
       onSaved()
     } catch (err) {
-      setError(err.message)
+      const esErrorDeRed = err instanceof TypeError || err.message === 'Failed to fetch'
+      setError(
+        esErrorDeRed
+          ? 'No se pudo conectar con el servidor. Verificá que el backend esté activo.'
+          : (err.message || 'El servidor rechazó la solicitud.')
+      )
     } finally {
       setLoading(false)
     }

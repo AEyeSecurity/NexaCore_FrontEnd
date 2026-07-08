@@ -21,6 +21,7 @@ export default function PruebaModal({ protocolo, onClose, onSaved }) {
   const items = protocolo.items ?? []
   const [fecha, setFecha] = useState(today())
   const [respuestas, setRespuestas] = useState({})
+  const [resultadoTexto, setResultadoTexto] = useState('')
   const [observaciones, setObservaciones] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -44,12 +45,18 @@ export default function PruebaModal({ protocolo, onClose, onSaved }) {
       }))
       await protocolosApi.registrarPrueba(protocolo.id, {
         fecha,
-        resultados,
+        resultado_texto: resultadoTexto.trim() || undefined,
         observaciones: observaciones.trim() || undefined,
+        resultados,
       })
       onSaved()
     } catch (err) {
-      setError(err.message)
+      const esErrorDeRed = err instanceof TypeError || err.message === 'Failed to fetch'
+      setError(
+        esErrorDeRed
+          ? 'No se pudo conectar con el servidor. Verificá que el backend esté activo.'
+          : (err.message || 'Error al guardar la prueba.')
+      )
     } finally {
       setLoading(false)
     }
@@ -94,12 +101,21 @@ export default function PruebaModal({ protocolo, onClose, onSaved }) {
         </div>
 
         <div>
+          <label className="text-[11.5px] font-medium text-gray-500 mb-1.5 block">Resultados</label>
+          <textarea value={resultadoTexto} onChange={e => setResultadoTexto(e.target.value)}
+            rows={3} maxLength={800}
+            placeholder="Escribir el resultado general de la prueba"
+            className={inputCls + ' resize-none'} style={inputStyle} />
+          <p className="text-right text-[11px] text-gray-400 mt-1">{resultadoTexto.length}/800</p>
+        </div>
+
+        <div>
           <label className="text-[11.5px] font-medium text-gray-500 mb-1.5 block">Observaciones generales</label>
           <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)}
-            rows={3} maxLength={300}
+            rows={3} maxLength={800}
             placeholder="Agregar un comentario general de la prueba (opcional)"
             className={inputCls + ' resize-none'} style={inputStyle} />
-          <p className="text-right text-[11px] text-gray-400 mt-1">{observaciones.length}/300</p>
+          <p className="text-right text-[11px] text-gray-400 mt-1">{observaciones.length}/800</p>
         </div>
 
         {error && <div className="p-3 rounded-xl text-[13px] text-red-600 bg-red-50">{error}</div>}

@@ -91,11 +91,18 @@ export default function ReportePrueba({ pruebaId, onBack }) {
               <p className="text-[13px] text-gray-400 py-4">Esta prueba no tiene resultados registrados.</p>
             )}
           </div>
-          {prueba.observaciones && (
+          {prueba.resultado_texto ? (
             <div className="mt-4 pt-4 border-t text-[13px] text-gray-600" style={{ borderColor: 'rgba(15,110,86,0.08)' }}>
-              <span className="font-semibold text-gray-800">Observaciones generales: </span>{prueba.observaciones}
+              <p className="font-semibold text-gray-800 mb-1">Resultados</p>
+              <p className="whitespace-pre-wrap">{prueba.resultado_texto}</p>
             </div>
-          )}
+          ) : null}
+          {prueba.observaciones ? (
+            <div className="mt-4 pt-4 border-t text-[13px] text-gray-600" style={{ borderColor: 'rgba(15,110,86,0.08)' }}>
+              <p className="font-semibold text-gray-800 mb-1">Observaciones generales</p>
+              <p className="whitespace-pre-wrap">{prueba.observaciones}</p>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
