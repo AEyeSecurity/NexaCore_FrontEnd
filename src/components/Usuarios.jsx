@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, MoreVertical, X, ChevronDown } from 'lucide-react'
+import { Plus, X, ChevronDown } from 'lucide-react'
 import { api } from '../lib/api'
 import { validateUserForm } from '../utils/validators'
 import AppModal from './AppModal'
@@ -46,7 +46,6 @@ export default function Usuarios({ user }) {
   const [usuarios, setUsuarios] = useState([])
   const [roles, setRoles]       = useState([])
   const [loading, setLoading]   = useState(true)
-  const [openMenu, setOpenMenu] = useState(null)
   const [modal, setModal]       = useState(null) // null | 'nuevo' | usuario-object
   const [form, setForm]         = useState({ email: '', nombre: '', rol_id: '', estado: 'Activo', password: '' })
   const [saving, setSaving]     = useState(false)
@@ -93,7 +92,6 @@ export default function Usuarios({ user }) {
     setForm({ email: u.email, nombre: u.nombre, rol_id: u.rol_id, estado: u.estado })
     setError(null)
     setModal(u)
-    setOpenMenu(null)
   }
 
   const guardar = async (e) => {
@@ -127,7 +125,6 @@ export default function Usuarios({ user }) {
 
   const eliminar = async (u) => {
     if (!canDeleteUser(u)) return
-    setOpenMenu(null)
     if (!confirm('¿Eliminar este usuario?')) return
     try { await api.eliminarUsuario(u.id); cargar() }
     catch (err) { alert(err.message) }
@@ -184,7 +181,6 @@ export default function Usuarios({ user }) {
                 const estadoStyle = ESTADO_STYLE[u.estado] || ESTADO_STYLE['Inactivo']
                 const grad        = getGradient(i)
                 const initials    = getInitials(u.nombre.split(' ')[0], u.nombre.split(' ').slice(-1)[0])
-                const menuOpen    = openMenu === u.id
                 const showActions = hasUserActions(u)
 
                 return (
@@ -233,35 +229,22 @@ export default function Usuarios({ user }) {
                     {/* Acciones */}
                     <td className="py-3.5 px-4">
                       {showActions && (
-                        <div className={`flex justify-end relative transition-opacity ${menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                          <button
-                            onClick={() => setOpenMenu(menuOpen ? null : u.id)}
-                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                          >
-                            <MoreVertical size={15} />
-                          </button>
-                          {menuOpen && (
-                            <div
-                              className="absolute right-0 top-8 z-20 bg-white border rounded-xl shadow-lg py-1 w-36"
-                              style={{ borderColor: 'rgba(15,110,86,0.12)' }}
+                        <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                          {canEditUser(u) && (
+                            <button
+                              onClick={() => abrirEditar(u)}
+                              className="px-3 py-1.5 rounded-lg text-[12.5px] font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
                             >
-                              {canEditUser(u) && (
-                                <button
-                                  onClick={() => abrirEditar(u)}
-                                  className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-gray-50"
-                                >
-                                  Editar
-                                </button>
-                              )}
-                              {canDeleteUser(u) && (
-                                <button
-                                  onClick={() => eliminar(u)}
-                                  className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50"
-                                >
-                                  Eliminar
-                                </button>
-                              )}
-                            </div>
+                              Editar
+                            </button>
+                          )}
+                          {canDeleteUser(u) && (
+                            <button
+                              onClick={() => eliminar(u)}
+                              className="px-3 py-1.5 rounded-lg text-[12.5px] font-medium bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                            >
+                              Eliminar
+                            </button>
                           )}
                         </div>
                       )}
@@ -273,11 +256,6 @@ export default function Usuarios({ user }) {
           </table>
         </div>
       </div>
-
-      {/* Click-outside close for menu */}
-      {openMenu && (
-        <div className="fixed inset-0 z-10" onClick={() => setOpenMenu(null)} />
-      )}
 
       {/* Modal crear/editar */}
       {modal && (
