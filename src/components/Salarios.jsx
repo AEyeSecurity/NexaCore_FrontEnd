@@ -214,10 +214,20 @@ function TabEmpleados() {
       if (form.moneda === 'USD' && (!form.cotizacion_valor || !form.cotizacion_tipo)) {
         throw new Error('Para empleados en USD debe seleccionar una cotización (compra o venta).')
       }
+      if (!form.fecha_ingreso?.trim()) {
+        throw new Error('Debe seleccionar una fecha de ingreso.')
+      }
+      // Email y teléfono son opcionales: normalizamos vacíos/espacios a null
+      // para que el backend no los trate como valores duplicados entre sí.
+      const payload = {
+        ...form,
+        email:    form.email?.trim()    || null,
+        telefono: form.telefono?.trim() || null,
+      }
       if (modal === 'nuevo') {
-        await api.crearEmpleado(form)
+        await api.crearEmpleado(payload)
       } else {
-        await api.editarEmpleado(modal.id, form)
+        await api.editarEmpleado(modal.id, payload)
       }
       setModal(null)
       cargar()
@@ -439,7 +449,7 @@ function TabEmpleados() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Fecha ingreso</Label>
+                <Label>Fecha ingreso *</Label>
                 <input type="date" value={form.fecha_ingreso || ''} onChange={e => set('fecha_ingreso')(e.target.value)}
                   className={inputCls} style={inputStyle} />
               </div>

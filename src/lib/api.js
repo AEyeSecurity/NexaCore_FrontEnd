@@ -204,6 +204,7 @@ export const api = {
 
   // ── Organización ──────────────────────────────────
   getOrganigrama:       ()           => request('/api/organizacion/organigrama'),
+  getPersonasAsignables:()           => request('/api/organizacion/personas-asignables'),
   crearNodoOrganigrama: (body)       => request('/api/organizacion/organigrama',      { method: 'POST',   body: JSON.stringify(body) }),
   actualizarNodoOrganigrama: (id, body) => request(`/api/organizacion/organigrama/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   eliminarNodoOrganigrama:   (id)    => request(`/api/organizacion/organigrama/${id}`, { method: 'DELETE' }),
