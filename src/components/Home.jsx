@@ -23,9 +23,9 @@ const SYSTEM_ITEMS = [
 const ROLE_PAGES = {
   'Superadmin': null,
   'Dirección':  null,
-  'Operativo':  ['operations'],
-  'Contable':   ['finance', 'reportes'],
-  'Comercial':  ['crm', 'planification'],
+  'Operativo':  ['dashboard', 'operations'],
+  'Contable':   ['dashboard', 'finance', 'reportes'],
+  'Comercial':  ['dashboard', 'crm', 'planification'],
 }
 
 function getInitials(name = '') {
@@ -42,7 +42,7 @@ export default function Home({ user, onNavigate, onLogout }) {
   const userInitials = getInitials(userName)
   const allowedPages = ROLE_PAGES[userRole] ?? null
 
-  const canSeeDashboard = !allowedPages
+  const canSeeDashboard = !allowedPages || allowedPages.includes('dashboard')
   const visibleModules  = MODULES.filter(m => !allowedPages || allowedPages.includes(m.id))
   const visibleSystem   = SYSTEM_ITEMS.filter(m => !allowedPages || allowedPages.includes(m.id))
 
