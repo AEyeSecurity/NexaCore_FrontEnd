@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronUp, ChevronDown, X, AlertCircle } from 'lucide-react'
+import { X, AlertCircle } from 'lucide-react'
 import { WIDGET_CATALOG, MODULE_META, isWidgetSelectable } from './widgetCatalog'
 
 export default function EditWidgetsPanel({
@@ -35,22 +35,9 @@ export default function EditWidgetsPanel({
     setDraft(prev => checked ? [...prev, id] : prev.filter(x => x !== id))
   }
 
-  const moveWidget = (id, direction) => {
-    setDraft(prev => {
-      const i = prev.indexOf(id)
-      const j = direction === 'up' ? i - 1 : i + 1
-      if (i === -1 || j < 0 || j >= prev.length) return prev
-      const next = [...prev]
-      ;[next[i], next[j]] = [next[j], next[i]]
-      return next
-    })
-  }
-
   const modulesToShow = Object.entries(MODULE_META).filter(([moduleId]) =>
     allowedModules?.includes(moduleId)
   )
-
-  const draftWidgets = draft.map(id => WIDGET_CATALOG[id]).filter(Boolean)
 
   return createPortal(
     <div className="absolute inset-0 z-50 flex justify-end">
@@ -62,15 +49,15 @@ export default function EditWidgetsPanel({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Editar mosaicos"
+        aria-label="Agregar mosaico"
         className="relative bg-white shadow-2xl w-full sm:w-[400px] max-w-[92vw] h-full flex flex-col fade-in"
       >
         {/* Header */}
         <div className="flex items-start justify-between px-6 py-5 border-b" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
           <div>
-            <h2 className="font-serif text-[18px] font-semibold text-gray-900">Editar mosaicos</h2>
+            <h2 className="font-serif text-[18px] font-semibold text-gray-900">Agregar mosaico</h2>
             <p className="text-[12.5px] text-gray-500 mt-1">
-              Elegí qué mosaicos ver y en qué orden aparecen en tu panel.
+              Elegí qué mosaicos querés sumar a tu panel.
             </p>
           </div>
           <button
@@ -115,48 +102,6 @@ export default function EditWidgetsPanel({
               )
             })
           )}
-
-          {/* Orden */}
-          <div className="mt-2">
-            <h3 className="text-[13px] font-semibold text-gray-700 mb-1">Orden en el tablero</h3>
-            <p className="text-[11.5px] text-gray-400 mb-3">Usá las flechas para cambiar el orden de los mosaicos seleccionados.</p>
-            {draftWidgets.length === 0 ? (
-              <p className="text-[12px] text-gray-400 py-2">No hay mosaicos seleccionados todavía.</p>
-            ) : (
-              <div className="space-y-2">
-                {draftWidgets.map((w, idx) => (
-                  <div
-                    key={w.id}
-                    className="flex items-center gap-2.5 rounded-xl border px-3 py-2"
-                    style={{ borderColor: 'rgba(15,110,86,0.12)', background: '#F8FAF9' }}
-                  >
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: w.colors.accent }} />
-                    <span className="flex-1 text-[12.5px] font-medium text-gray-700 truncate">{w.title}</span>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => moveWidget(w.id, 'up')}
-                        disabled={idx === 0}
-                        aria-label={`Subir ${w.title}`}
-                        className="w-6 h-6 rounded-md border flex items-center justify-center disabled:opacity-30 hover:bg-white transition-colors"
-                        style={{ borderColor: 'rgba(15,110,86,0.15)' }}
-                      >
-                        <ChevronUp size={13} className="text-gray-500" />
-                      </button>
-                      <button
-                        onClick={() => moveWidget(w.id, 'down')}
-                        disabled={idx === draftWidgets.length - 1}
-                        aria-label={`Bajar ${w.title}`}
-                        className="w-6 h-6 rounded-md border flex items-center justify-center disabled:opacity-30 hover:bg-white transition-colors"
-                        style={{ borderColor: 'rgba(15,110,86,0.15)' }}
-                      >
-                        <ChevronDown size={13} className="text-gray-500" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Footer */}
