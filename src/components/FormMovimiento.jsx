@@ -1,14 +1,10 @@
 import { useState, useEffect } from 'react'
-import { X, Save, Upload, Repeat, RefreshCw } from 'lucide-react'
+import { X, Save, Repeat, RefreshCw } from 'lucide-react'
 import { api } from '../lib/api'
 import AppModal from './AppModal'
 import { obtenerCotizacion } from '../lib/dolarService'
 
 const CATEGORIAS = ['Tecnología', 'RRHH', 'Insumos', 'Servicios', 'Inversión', 'Otros', 'Suscripción']
-const MAX_FILE_MB = 10
-const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024
-const TIPOS_PERMITIDOS = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf']
-
 const INICIAL = {
   fecha: new Date().toISOString().split('T')[0],
   descripcion: '',
@@ -37,10 +33,6 @@ export default function FormMovimiento({ tipo, movimiento, onClose, onSaved, cat
   )
   const [loading, setLoading]         = useState(false)
   const [error, setError]             = useState(null)
-  const [archivo, setArchivo]         = useState(null)
-  const [archivoError, setArchivoError] = useState(null)
-  const [ocrData, setOcrData]         = useState(null)
-  const [uploadingOCR, setUploadingOCR] = useState(false)
 
   // Suscripción integration (only when tipo=Gasto + categoria=Suscripción, on creation)
   const [suscOpcion, setSuscOpcion]         = useState('ninguna') // 'ninguna' | 'existente' | 'nueva'
@@ -103,46 +95,6 @@ export default function FormMovimiento({ tipo, movimiento, onClose, onSaved, cat
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  const handleArchivo = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-
-    setArchivoError(null)
-
-    // Validación de tipo antes de subir
-    if (!TIPOS_PERMITIDOS.includes(file.type)) {
-      setArchivoError('Formato inválido. Solo se permiten JPG, PNG o PDF.')
-      e.target.value = ''
-      return
-    }
-
-    // Validación de tamaño antes de subir
-    if (file.size > MAX_FILE_BYTES) {
-      setArchivoError(`El archivo supera el límite de ${MAX_FILE_MB} MB.`)
-      e.target.value = ''
-      return
-    }
-
-    setArchivo(file)
-    setUploadingOCR(true)
-    setOcrData(null)
-
-    try {
-      const fd = new FormData()
-      fd.append('archivo', file)
-      const res = await api.subirComprobante(fd)
-      setOcrData({ comprobanteId: res.comprobante.id, ...res.ocr })
-      if (res.ocr.fecha && !form.fecha) set('fecha', res.ocr.fecha)
-      if (res.ocr.monto && !form.monto) set('monto', String(res.ocr.monto))
-      if (res.ocr.proveedor && !form.proveedor_cliente) set('proveedor_cliente', res.ocr.proveedor)
-    } catch (err) {
-      console.error('OCR error:', err)
-      setArchivoError('Error al procesar el comprobante. Podés completar los datos manualmente.')
-    } finally {
-      setUploadingOCR(false)
-    }
-  }
-
   const handleSubmit = async () => {
     // Validaciones frontend con trim
     if (!form.fecha) { setError('La fecha es obligatoria.'); return }
@@ -187,7 +139,6 @@ export default function FormMovimiento({ tipo, movimiento, onClose, onSaved, cat
         saved = await api.editarMovimiento(movimiento.id, payload)
       } else {
         saved = await api.crearMovimiento(payload)
-        if (ocrData?.comprobanteId) await api.vincularComprobante(ocrData.comprobanteId, saved.id)
       }
       onSaved(saved)
     } catch (err) {
@@ -419,41 +370,6 @@ export default function FormMovimiento({ tipo, movimiento, onClose, onSaved, cat
           <textarea value={form.notas} onChange={e => set('notas', e.target.value)}
             rows={2} placeholder="Notas adicionales..." className={inputCls + ' resize-none'} style={inputStyle} />
         </div>
-
-        {!movimiento && (
-          <div>
-            <label className="text-[11.5px] font-medium text-gray-500 mb-1.5 block">Comprobante (opcional)</label>
-            <label className="flex items-center gap-2 px-3 py-2.5 border-2 border-dashed rounded-xl cursor-pointer transition-colors text-[13px]"
-              style={{
-                borderColor: archivoError ? '#EF4444' : archivo ? '#1D9E75' : 'rgba(15,110,86,0.2)',
-                color: archivoError ? '#EF4444' : archivo ? '#0F6E56' : '#9ca3af',
-                background: archivo && !archivoError ? '#E1F5EE' : 'transparent',
-              }}>
-              <Upload size={15} />
-              {uploadingOCR ? 'Procesando OCR...' : archivo ? archivo.name : 'Subir imagen o PDF (máx. 10 MB)'}
-              <input
-                type="file"
-                accept="image/jpeg,image/jpg,image/png,application/pdf"
-                onChange={handleArchivo}
-                className="hidden"
-              />
-            </label>
-            {archivoError && (
-              <p className="mt-1 text-[12px] text-red-500">{archivoError}</p>
-            )}
-            {ocrData?.estado === 'procesado' && (
-              <div className="mt-2 p-3 rounded-xl text-[12px]" style={{ background: '#E1F5EE', color: '#0F6E56' }}>
-                <p className="font-semibold mb-1">✓ OCR completado</p>
-                {ocrData.fecha && <p>Fecha: {ocrData.fecha}</p>}
-                {ocrData.monto && <p>Monto: ${ocrData.monto.toLocaleString('es-AR')}</p>}
-                {ocrData.proveedor && <p>Emisor: {ocrData.proveedor}</p>}
-              </div>
-            )}
-            {ocrData?.estado === 'error' && (
-              <p className="mt-1 text-[12px] text-amber-600">No se pudo extraer datos. Completá manualmente.</p>
-            )}
-          </div>
-        )}
 
         {error && (
           <div className="p-3 rounded-xl text-[13px] text-red-600 bg-red-50">{error}</div>

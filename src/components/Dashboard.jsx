@@ -329,15 +329,15 @@ export default function Dashboard({ onNavigate }) {
           <h3 className="font-serif font-semibold text-[14px] mb-3" style={{ color: '#5B21B6' }}>
             Alertas & Notificaciones
           </h3>
-          {metricas?.pendientesOCR > 0 && (
+          {metricas?.comprobantesRevision > 0 && (
             <div className="flex items-start gap-2.5 py-2.5 border-b" style={{ borderColor: 'rgba(109,40,217,0.1)' }}>
               <span className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" style={{ background: '#3B82F6' }} />
               <p className="flex-1 text-[12px] text-gray-700 leading-snug">
-                {metricas.pendientesOCR} comprobante{metricas.pendientesOCR !== 1 ? 's' : ''} pendiente{metricas.pendientesOCR !== 1 ? 's' : ''} de validación OCR
+                {metricas.comprobantesRevision} comprobante{metricas.comprobantesRevision !== 1 ? 's' : ''} requiere{metricas.comprobantesRevision !== 1 ? 'n' : ''} revisión
               </p>
             </div>
           )}
-          {alertas.length === 0 && suscProximas.length === 0 && !metricas?.pendientesOCR ? (
+          {alertas.length === 0 && suscProximas.length === 0 && !metricas?.comprobantesRevision ? (
             <p className="text-[12px] text-gray-400 py-2">Sin alertas pendientes</p>
           ) : (
             <>

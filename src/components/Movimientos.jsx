@@ -1170,7 +1170,7 @@ export default function Movimientos({ tipo, openForm, onFormClose, titulo, titul
                       {esSalario(m) ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11.5px] bg-gray-100 text-gray-400">—</span>
                       ) : m.comprobantes?.length > 0 ? (
-                        <a href={m.comprobantes[0].url_archivo} target="_blank" rel="noreferrer"
+                        <a href={m.comprobantes[0].archivo_url} target="_blank" rel="noreferrer"
                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11.5px] font-medium"
                           style={{ background: '#E1F5EE', color: '#0F6E56' }}>
                           ✓ Ver

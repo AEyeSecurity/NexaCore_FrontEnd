@@ -10,6 +10,7 @@ node_modules/
 # Build
 dist/
 build/
+.playwright-cli/
 
 # macOS
 .DS_Store
