@@ -58,6 +58,18 @@ export const api = {
   getDashboardConfig:  () => request('/api/dashboard/config'),
   saveDashboardConfig: (widgets) => request('/api/dashboard/config', { method: 'PUT', body: JSON.stringify({ widgets }) }),
 
+  // ── Dashboard: vistas personalizadas ─────────────
+  // GET  /api/dashboard/views         → [{ id, nombre, orden, created_at }]
+  // POST /api/dashboard/views         ← { nombre } → { id, nombre, orden, widgets: [] }
+  // GET  /api/dashboard/views/:id     → { id, nombre, orden, widgets, allowedModules }
+  // PUT  /api/dashboard/views/:id     ← { nombre?, orden?, widgets? } → vista completa
+  // DELETE /api/dashboard/views/:id   → { message: "..." }
+  getDashboardViews:    ()             => request('/api/dashboard/views'),
+  createDashboardView:  (nombre)       => request('/api/dashboard/views',      { method: 'POST',   body: JSON.stringify({ nombre }) }),
+  getDashboardView:     (id)           => request(`/api/dashboard/views/${id}`),
+  saveDashboardView:    (id, widgets)  => request(`/api/dashboard/views/${id}`, { method: 'PUT',    body: JSON.stringify({ widgets }) }),
+  deleteDashboardView:  (id)           => request(`/api/dashboard/views/${id}`, { method: 'DELETE' }),
+
   // ── Finance ──────────────────────────────────────
   getMovimientos: (params = {}) => {
     const qs = new URLSearchParams(

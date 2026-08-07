@@ -5,6 +5,7 @@ import Login from './components/Login'
 import Home from './components/Home'
 import Layout from './components/Layout'
 import Dashboard from './components/Dashboard'
+import DashboardHub from './components/dashboard/DashboardHub'
 import FinanceModule from './modules/finance/FinanceModule'
 import OperationsModule from './modules/operations/OperationsModule'
 import CrmModule from './modules/crm/CrmModule'
@@ -107,7 +108,7 @@ export default function App() {
 
   return (
     <Layout page={page} onNavigate={navigate} user={user} onLogout={handleLogout}>
-      {page === 'dashboard'     && <Dashboard onNavigate={navigate} user={user} />}
+      {page === 'dashboard'     && <DashboardHub onNavigate={navigate} user={user} />}
       {page === 'finance'       && <FinanceModule user={user} initialTab={financeInitialTab} />}
       {page === 'operations'    && <OperationsModule user={user} />}
       {page === 'crm'           && <CrmModule />}
