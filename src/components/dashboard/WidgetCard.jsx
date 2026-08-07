@@ -1,4 +1,5 @@
 import { AlertCircle, RefreshCw } from 'lucide-react'
+import Sparkline from './Sparkline'
 
 function ErrorState({ message, onRetry }) {
   return (
@@ -21,9 +22,19 @@ function MetricBody({ widget, data, loading }) {
   const { icon: Icon, colors } = widget
   const trend = widget.getTrend ? widget.getTrend(data) : null
   const hasTrend = trend != null && !isNaN(Number(trend))
-  const up = Number(trend) > 0
+  const trendNum = Number(trend)
+  const isFlat = hasTrend && trendNum === 0
+  const up = trendNum > 0
+  // "Arriba" no siempre es bueno (ej. Gastos) — positiveDirection lo declara
+  // el mosaico; sin ese campo se asume que subir es la buena noticia.
+  const isGood = isFlat ? null : (widget.positiveDirection === 'down' ? !up : up)
+  const badgeColor = isFlat ? 'text-gray-500' : isGood ? 'text-emerald-700' : 'text-red-600'
+  const sign = isFlat ? '' : up ? '+' : '-'
+
+  const series = !loading && widget.getSeries ? widget.getSeries(data) : null
+
   return (
-    <>
+    <div className="h-full flex flex-col">
       <div className="flex items-start justify-between mb-4">
         <div
           className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -33,22 +44,30 @@ function MetricBody({ widget, data, loading }) {
         </div>
         {hasTrend && (
           <span
-            className={`flex items-center gap-0.5 text-[11px] font-semibold px-2 py-1 rounded-full ${
-              up ? 'text-emerald-700' : 'text-red-600'
-            }`}
+            title="vs. mes anterior"
+            className={`flex items-center gap-0.5 text-[11px] font-semibold px-2 py-1 rounded-full ${badgeColor}`}
             style={{ background: 'rgba(255,255,255,0.65)' }}
           >
-            {Math.abs(Number(trend))}%
+            {sign}{Math.abs(trendNum)}%
           </span>
         )}
       </div>
-      <p className="text-[24px] font-bold text-gray-900 leading-none mb-1.5">
-        {loading ? <span style={{ color: colors.accent, opacity: 0.3 }}>···</span> : widget.getValue(data)}
-      </p>
-      <p className="text-[10.5px] font-semibold uppercase tracking-wider" style={{ color: colors.accent }}>
-        {widget.title}
-      </p>
-    </>
+
+      {series && series.length > 1 && (
+        <div className="flex-1 min-h-[32px] flex items-end mb-2">
+          <Sparkline values={series} color={colors.accent} surface={colors.bg} />
+        </div>
+      )}
+
+      <div className={series ? '' : 'mt-auto'}>
+        <p className="text-[24px] font-bold text-gray-900 leading-none mb-1.5">
+          {loading ? <span style={{ color: colors.accent, opacity: 0.3 }}>···</span> : widget.getValue(data)}
+        </p>
+        <p className="text-[10.5px] font-semibold uppercase tracking-wider" style={{ color: colors.accent }}>
+          {widget.title}
+        </p>
+      </div>
+    </div>
   )
 }
 
@@ -56,7 +75,7 @@ function DetailBody({ widget, data, loading }) {
   const { icon: Icon, colors } = widget
   const rows = loading ? [] : widget.getRows(data)
   return (
-    <>
+    <div className="h-full flex flex-col">
       <div className="flex items-center gap-2.5 mb-3.5">
         <div
           className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -73,7 +92,7 @@ function DetailBody({ widget, data, loading }) {
       ) : rows.length === 0 ? (
         <p className="text-[12px] text-gray-400">Sin datos</p>
       ) : (
-        <div className="space-y-0">
+        <div className="flex-1 flex flex-col justify-center">
           {rows.map((row, i) => (
             <div key={i}>
               <div className="flex items-center justify-between py-1.5">
@@ -85,7 +104,7 @@ function DetailBody({ widget, data, loading }) {
           ))}
         </div>
       )}
-    </>
+    </div>
   )
 }
 
@@ -93,7 +112,7 @@ export default function WidgetCard({ widget, groupState, onRetry }) {
   const { loading, error, data } = groupState || { loading: true, error: null, data: null }
 
   return (
-    <div className="rounded-2xl p-5 shadow-sm" style={{ background: widget.colors.bg }}>
+    <div className="h-full rounded-2xl p-5 shadow-sm" style={{ background: widget.colors.bg }}>
       {error ? (
         <ErrorState message={error} onRetry={onRetry} />
       ) : widget.type === 'metric' ? (

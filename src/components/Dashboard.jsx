@@ -4,12 +4,13 @@ import {
   ChevronDown, SlidersHorizontal, LayoutGrid,
   RefreshCw, AlertCircle, CheckCircle2,
 } from 'lucide-react'
-import { WIDGET_CATALOG } from './dashboard/widgetCatalog'
+import { WIDGET_CATALOG, seriesKeyFor } from './dashboard/widgetCatalog'
 import { useDashboardMetrics } from './dashboard/useDashboardMetrics'
 import WidgetCard from './dashboard/WidgetCard'
 import EditableWidgetCard from './dashboard/EditableWidgetCard'
 import AddWidgetCard from './dashboard/AddWidgetCard'
 import EditWidgetsPanel from './dashboard/EditWidgetsPanel'
+import { DEFAULT_TILE_SIZE, TILE_SIZE_SPAN_CLASS } from './dashboard/widgetSizes'
 
 function getMesesOptions() {
   const now  = new Date()
@@ -52,6 +53,11 @@ export default function Dashboard({ user }) {
   const [dragIndex, setDragIndex]       = useState(null)
   const [dragOverIndex, setDragOverIndex] = useState(null)
 
+  // ── Tamaño de mosaico (chico/mediano/grande) ──────────────────────────
+  // Persistido por el backend junto con cada widget: savedWidgets es
+  // [{ id, size }]. draftWidgetSizes es la copia editable en modo edición.
+  const [draftWidgetSizes, setDraftWidgetSizes] = useState({})
+
   const [toast, setToast] = useState(null)
   const toastTimer = useRef(null)
   const showToast = useCallback((message) => {
@@ -77,12 +83,20 @@ export default function Dashboard({ user }) {
 
   useEffect(() => { loadConfig() }, [loadConfig])
 
-  const { metricsByGroup, retryGroup } = useDashboardMetrics(savedWidgets, mes, anio)
+  // savedWidgets llega del backend como [{ id, size }]. Los ids en orden se
+  // usan para pedir métricas y para el panel de agregar/quitar mosaicos
+  // (que no conoce tamaños); savedSizesById es la fuente de tamaño en modo
+  // normal y el punto de partida al entrar a modo edición.
+  const savedWidgetIds = savedWidgets.map(w => w.id)
+  const savedSizesById = Object.fromEntries(savedWidgets.map(w => [w.id, w.size]))
+
+  const { metricsBySeries, retrySeries } = useDashboardMetrics(savedWidgetIds, mes, anio)
 
   const handleSave = (orderedIds) => {
     setSaving(true)
     setSaveError(null)
-    api.saveDashboardConfig(orderedIds)
+    const payload = orderedIds.map(id => ({ id, size: savedSizesById[id] || DEFAULT_TILE_SIZE }))
+    api.saveDashboardConfig(payload)
       .then(res => {
         setDashboardName(res?.dashboard?.name || 'Panel General')
         setSavedWidgets(res?.dashboard?.widgets || [])
@@ -101,7 +115,8 @@ export default function Dashboard({ user }) {
 
   // ── Modo edición: quitar / reordenar sobre una copia local ────────────
   const enterEditMode = () => {
-    setDraftWidgets(savedWidgets)
+    setDraftWidgets(savedWidgetIds)
+    setDraftWidgetSizes(savedSizesById)
     setEditSaveError(null)
     setEditMode(true)
   }
@@ -115,6 +130,10 @@ export default function Dashboard({ user }) {
 
   const removeDraftWidget = (id) => {
     setDraftWidgets(prev => prev.filter(x => x !== id))
+  }
+
+  const setDraftWidgetSize = (id, size) => {
+    setDraftWidgetSizes(prev => ({ ...prev, [id]: size }))
   }
 
   const reorderDraftWidgets = (fromIndex, toIndex) => {
@@ -158,7 +177,8 @@ export default function Dashboard({ user }) {
   const handleSaveEdit = () => {
     setEditSaving(true)
     setEditSaveError(null)
-    api.saveDashboardConfig(draftWidgets)
+    const payload = draftWidgets.map(id => ({ id, size: draftWidgetSizes[id] || DEFAULT_TILE_SIZE }))
+    api.saveDashboardConfig(payload)
       .then(res => {
         setDashboardName(res?.dashboard?.name || 'Panel General')
         setSavedWidgets(res?.dashboard?.widgets || [])
@@ -178,7 +198,7 @@ export default function Dashboard({ user }) {
   const mesLabel = MESES.find(m => m.value === selectedMes)?.label ?? ''
   const showEmptyState = !configLoading && !configError && !editMode && savedWidgets.length === 0
   const showGrid = !configLoading && !configError && (editMode || savedWidgets.length > 0)
-  const displayedWidgets = (editMode ? draftWidgets : savedWidgets).map(id => WIDGET_CATALOG[id]).filter(Boolean)
+  const displayedWidgets = (editMode ? draftWidgets : savedWidgetIds).map(id => WIDGET_CATALOG[id]).filter(Boolean)
 
   return (
     <div className="fade-in space-y-5">
@@ -294,30 +314,37 @@ export default function Dashboard({ user }) {
       {/* ── Grid de mosaicos ───────────────────────────────────────────── */}
       {showGrid && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {displayedWidgets.map((widget, idx) => (
-            editMode ? (
-              <EditableWidgetCard
-                key={widget.id}
-                widget={widget}
-                groupState={metricsByGroup[widget.group]}
-                onRetry={() => retryGroup(widget.group)}
-                onRemove={() => removeDraftWidget(widget.id)}
-                isDragging={dragIndex === idx}
-                isDragOver={dragOverIndex === idx}
-                onDragStart={handleDragStart(idx)}
-                onDragOver={handleDragOverCard(idx)}
-                onDrop={handleDrop(idx)}
-                onDragEnd={handleDragEnd}
-              />
-            ) : (
-              <WidgetCard
-                key={widget.id}
-                widget={widget}
-                groupState={metricsByGroup[widget.group]}
-                onRetry={() => retryGroup(widget.group)}
-              />
+          {displayedWidgets.map((widget, idx) => {
+            const activeSizes = editMode ? draftWidgetSizes : savedSizesById
+            const size = activeSizes[widget.id] || DEFAULT_TILE_SIZE
+            const seriesId = seriesKeyFor(widget)
+            return (
+              <div key={widget.id} className={TILE_SIZE_SPAN_CLASS[size]}>
+                {editMode ? (
+                  <EditableWidgetCard
+                    widget={widget}
+                    groupState={metricsBySeries[seriesId]}
+                    onRetry={() => retrySeries(seriesId)}
+                    onRemove={() => removeDraftWidget(widget.id)}
+                    size={size}
+                    onSizeChange={(s) => setDraftWidgetSize(widget.id, s)}
+                    isDragging={dragIndex === idx}
+                    isDragOver={dragOverIndex === idx}
+                    onDragStart={handleDragStart(idx)}
+                    onDragOver={handleDragOverCard(idx)}
+                    onDrop={handleDrop(idx)}
+                    onDragEnd={handleDragEnd}
+                  />
+                ) : (
+                  <WidgetCard
+                    widget={widget}
+                    groupState={metricsBySeries[seriesId]}
+                    onRetry={() => retrySeries(seriesId)}
+                  />
+                )}
+              </div>
             )
-          ))}
+          })}
           {!editMode && <AddWidgetCard onClick={() => setPanelOpen(true)} />}
         </div>
       )}
@@ -330,7 +357,7 @@ export default function Dashboard({ user }) {
 
       <EditWidgetsPanel
         open={panelOpen}
-        savedWidgets={savedWidgets}
+        savedWidgets={savedWidgetIds}
         allowedModules={allowedModules}
         userRole={user?.role}
         saving={saving}
