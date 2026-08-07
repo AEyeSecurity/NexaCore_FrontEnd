@@ -131,17 +131,32 @@ export default function FormMovimiento({ tipo, movimiento, onClose, onSaved, cat
       const fd = new FormData()
       fd.append('archivo', file)
       const res = await api.subirComprobante(fd)
-      setOcrData({ comprobanteId: res.comprobante.id, ...res.ocr })
-      if (res.ocr.fecha && !form.fecha) set('fecha', res.ocr.fecha)
-      if (res.ocr.monto && !form.monto) set('monto', String(res.ocr.monto))
-      if (res.ocr.proveedor && !form.proveedor_cliente) set('proveedor_cliente', res.ocr.proveedor)
+      setOcrData(res)
+
+      const extraccion = res.comprobante?.extraccion || {}
+      if (extraccion.issueDate) set('fecha', extraccion.issueDate)
+      if (extraccion.total && !form.monto) set('monto', String(extraccion.total))
+      if (extraccion.issuer?.name && !form.proveedor_cliente) set('proveedor_cliente', extraccion.issuer.name)
+      if (extraccion.description && !form.descripcion) set('descripcion', extraccion.description)
+      if (!modoInversion && extraccion.suggestedCategory) set('categoria', extraccion.suggestedCategory)
+      if (!modoInversion && extraccion.suggestedTransactionType) set('tipo', extraccion.suggestedTransactionType)
     } catch (err) {
-      console.error('OCR error:', err)
+      console.error('Error al subir comprobante:', err)
       setArchivoError('Error al procesar el comprobante. Podés completar los datos manualmente.')
     } finally {
       setUploadingOCR(false)
     }
   }
+
+  const extraccionOCR = ocrData?.comprobante?.extraccion || {}
+  const estadoAnalisisOCR = ocrData?.comprobante?.estado_analisis
+  const analysisErrors = ocrData?.analysis?.errors?.length
+    ? ocrData.analysis.errors
+    : (ocrData?.comprobante?.diagnostico?.errors || [])
+  const esDuplicadoOCR = !!(ocrData?.analysis?.duplicate_of_id || ocrData?.comprobante?.duplicate_of_id)
+  const movimientoGeneradoOCR = ocrData?.movimiento || null
+  const ocrProcesadoConMovimiento = estadoAnalisisOCR === 'procesado' && !!movimientoGeneradoOCR?.id
+  const comprobanteSinMovimiento = !movimiento && !!ocrData && !ocrProcesadoConMovimiento
 
   const handleSubmit = async () => {
     // Validaciones frontend con trim
@@ -150,6 +165,10 @@ export default function FormMovimiento({ tipo, movimiento, onClose, onSaved, cat
     if (!form.monto || Number(form.monto) <= 0) { setError('El monto debe ser mayor a 0.'); return }
     if (!form.categoria) { setError('La categoría es obligatoria.'); return }
     if (!form.tipo) { setError('El tipo es obligatorio.'); return }
+    if (comprobanteSinMovimiento) {
+      setError('No se puede guardar: revisá el comprobante antes de continuar.')
+      return
+    }
 
     setLoading(true)
     setError(null)
@@ -185,9 +204,11 @@ export default function FormMovimiento({ tipo, movimiento, onClose, onSaved, cat
         })
       } else if (movimiento) {
         saved = await api.editarMovimiento(movimiento.id, payload)
+      } else if (ocrProcesadoConMovimiento) {
+        // Gemini ya creó y vinculó el movimiento durante el análisis del comprobante
+        saved = await api.editarMovimiento(movimientoGeneradoOCR.id, payload)
       } else {
         saved = await api.crearMovimiento(payload)
-        if (ocrData?.comprobanteId) await api.vincularComprobante(ocrData.comprobanteId, saved.id)
       }
       onSaved(saved)
     } catch (err) {
@@ -441,16 +462,40 @@ export default function FormMovimiento({ tipo, movimiento, onClose, onSaved, cat
             {archivoError && (
               <p className="mt-1 text-[12px] text-red-500">{archivoError}</p>
             )}
-            {ocrData?.estado === 'procesado' && (
-              <div className="mt-2 p-3 rounded-xl text-[12px]" style={{ background: '#E1F5EE', color: '#0F6E56' }}>
-                <p className="font-semibold mb-1">✓ OCR completado</p>
-                {ocrData.fecha && <p>Fecha: {ocrData.fecha}</p>}
-                {ocrData.monto && <p>Monto: ${ocrData.monto.toLocaleString('es-AR')}</p>}
-                {ocrData.proveedor && <p>Emisor: {ocrData.proveedor}</p>}
-              </div>
-            )}
-            {ocrData?.estado === 'error' && (
-              <p className="mt-1 text-[12px] text-amber-600">No se pudo extraer datos. Completá manualmente.</p>
+            {ocrData && (
+              esDuplicadoOCR ? (
+                <div className="mt-2 p-3 rounded-xl text-[12px] bg-amber-50 text-amber-700">
+                  <p className="font-semibold">El comprobante ya fue cargado anteriormente.</p>
+                </div>
+              ) : estadoAnalisisOCR === 'error' ? (
+                <div className="mt-2 p-3 rounded-xl text-[12px] bg-red-50 text-red-600">
+                  <p className="font-semibold mb-1">No se pudo analizar el comprobante.</p>
+                  {analysisErrors.length > 0 && (
+                    <ul className="list-disc list-inside mt-0.5">
+                      {analysisErrors.map((e, i) => <li key={i}>{e}</li>)}
+                    </ul>
+                  )}
+                </div>
+              ) : estadoAnalisisOCR === 'requiere_revision' ? (
+                <div className="mt-2 p-3 rounded-xl text-[12px] bg-amber-50 text-amber-700">
+                  <p className="font-semibold mb-1">Los datos extraídos requieren revisión.</p>
+                  {analysisErrors.length > 0 && (
+                    <ul className="list-disc list-inside mt-0.5">
+                      {analysisErrors.map((e, i) => <li key={i}>{e}</li>)}
+                    </ul>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-2 p-3 rounded-xl text-[12px]" style={{ background: '#E1F5EE', color: '#0F6E56' }}>
+                  <p className="font-semibold mb-1">✓ Comprobante analizado</p>
+                  {extraccionOCR.issueDate && <p>Fecha: {extraccionOCR.issueDate}</p>}
+                  {extraccionOCR.total && <p>Monto: ${extraccionOCR.total.toLocaleString('es-AR')}</p>}
+                  {extraccionOCR.issuer?.name && <p>Emisor: {extraccionOCR.issuer.name}</p>}
+                  {movimientoGeneradoOCR && (
+                    <p className="mt-1 opacity-80">Se creó un movimiento automáticamente — al guardar se actualizará.</p>
+                  )}
+                </div>
+              )
             )}
           </div>
         )}
@@ -467,11 +512,11 @@ export default function FormMovimiento({ tipo, movimiento, onClose, onSaved, cat
           style={{ borderColor: 'rgba(15,110,86,0.2)' }}>
           Cancelar
         </button>
-        <button onClick={handleSubmit} disabled={loading}
+        <button onClick={handleSubmit} disabled={loading || uploadingOCR || comprobanteSinMovimiento}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-white text-[13px] font-medium shadow-sm transition-colors disabled:opacity-60"
           style={{ background: '#0F6E56' }}>
           <Save size={15} />
-          {loading ? 'Guardando...' : movimiento ? 'Guardar cambios' : 'Crear registro'}
+          {loading ? 'Guardando...' : (movimiento || ocrProcesadoConMovimiento) ? 'Guardar cambios' : 'Crear registro'}
         </button>
       </div>
     </AppModal>

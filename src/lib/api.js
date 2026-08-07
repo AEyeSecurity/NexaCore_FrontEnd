@@ -85,8 +85,6 @@ export const api = {
 
   getComprobantes: () => request('/api/finance/comprobantes'),
   subirComprobante: (formData) => requestMultipart('/api/finance/comprobantes/upload', 'POST', formData),
-  vincularComprobante: (id, movimiento_id) =>
-    request(`/api/finance/comprobantes/${id}/vincular`, { method: 'PUT', body: JSON.stringify({ movimiento_id }) }),
   eliminarComprobante: (id) => request(`/api/finance/comprobantes/${id}`, { method: 'DELETE' }),
 
   validarExcel:  (formData) => requestMultipart('/api/finance/excel/validar',  'POST', formData),
