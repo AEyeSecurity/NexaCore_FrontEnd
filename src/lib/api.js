@@ -31,7 +31,11 @@ async function request(path, options = {}) {
     ...options,
   })
   const data = await res.json()
-  if (!res.ok) throw new Error(data.error || 'Error en la solicitud')
+  if (!res.ok) {
+    const err = new Error(data.error || 'Error en la solicitud')
+    err.status = res.status
+    throw err
+  }
   return data
 }
 
@@ -50,6 +54,22 @@ async function requestMultipart(path, method, formData) {
 }
 
 export const api = {
+  // ── Dashboard personalizable ──────────────────────
+  getDashboardConfig:  () => request('/api/dashboard/config'),
+  saveDashboardConfig: (widgets) => request('/api/dashboard/config', { method: 'PUT', body: JSON.stringify({ widgets }) }),
+
+  // ── Dashboard: vistas personalizadas ─────────────
+  // GET  /api/dashboard/views         → [{ id, nombre, orden, created_at }]
+  // POST /api/dashboard/views         ← { nombre } → { id, nombre, orden, widgets: [] }
+  // GET  /api/dashboard/views/:id     → { id, nombre, orden, widgets, allowedModules }
+  // PUT  /api/dashboard/views/:id     ← { nombre?, orden?, widgets? } → vista completa
+  // DELETE /api/dashboard/views/:id   → { message: "..." }
+  getDashboardViews:    ()             => request('/api/dashboard/views'),
+  createDashboardView:  (nombre)       => request('/api/dashboard/views',      { method: 'POST',   body: JSON.stringify({ nombre }) }),
+  getDashboardView:     (id)           => request(`/api/dashboard/views/${id}`),
+  saveDashboardView:    (id, widgets)  => request(`/api/dashboard/views/${id}`, { method: 'PUT',    body: JSON.stringify({ widgets }) }),
+  deleteDashboardView:  (id)           => request(`/api/dashboard/views/${id}`, { method: 'DELETE' }),
+
   // ── Finance ──────────────────────────────────────
   getMovimientos: (params = {}) => {
     const qs = new URLSearchParams(
@@ -77,8 +97,6 @@ export const api = {
 
   getComprobantes: () => request('/api/finance/comprobantes'),
   subirComprobante: (formData) => requestMultipart('/api/finance/comprobantes/upload', 'POST', formData),
-  vincularComprobante: (id, movimiento_id) =>
-    request(`/api/finance/comprobantes/${id}/vincular`, { method: 'PUT', body: JSON.stringify({ movimiento_id }) }),
   eliminarComprobante: (id) => request(`/api/finance/comprobantes/${id}`, { method: 'DELETE' }),
 
   validarExcel:  (formData) => requestMultipart('/api/finance/excel/validar',  'POST', formData),
@@ -106,7 +124,12 @@ export const api = {
   eliminarDeuda:(id)       => request(`/api/finance/deudas/${id}`, { method: 'DELETE' }),
 
   // ── Salarios ─────────────────────────────────────
-  getMetricasSalarios: () => request('/api/finance/salarios/metricas'),
+  getMetricasSalarios: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([, v]) => v))
+    ).toString()
+    return request(`/api/finance/salarios/metricas${qs ? `?${qs}` : ''}`)
+  },
 
   getEmpleados: (params = {}) => {
     const qs = new URLSearchParams(
@@ -155,7 +178,12 @@ export const api = {
     ).toString()
     return request(`/api/operations/tareas${qs ? `?${qs}` : ''}`)
   },
-  getMetricasOperations: () => request('/api/operations/tareas/metricas'),
+  getMetricasOperations: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([, v]) => v))
+    ).toString()
+    return request(`/api/operations/tareas/metricas${qs ? `?${qs}` : ''}`)
+  },
   crearTarea:   (body)     => request('/api/operations/tareas',       { method: 'POST',   body: JSON.stringify(body) }),
   editarTarea:  (id, body) => request(`/api/operations/tareas/${id}`, { method: 'PUT',    body: JSON.stringify(body) }),
   eliminarTarea:(id)       => request(`/api/operations/tareas/${id}`, { method: 'DELETE' }),
@@ -177,7 +205,12 @@ export const api = {
     ).toString()
     return request(`/api/crm/contactos${qs ? `?${qs}` : ''}`)
   },
-  getMetricasCrm: () => request('/api/crm/contactos/metricas'),
+  getMetricasCrm: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([, v]) => v))
+    ).toString()
+    return request(`/api/crm/contactos/metricas${qs ? `?${qs}` : ''}`)
+  },
   crearContacto:   (body)     => request('/api/crm/contactos',       { method: 'POST',   body: JSON.stringify(body) }),
   editarContacto:  (id, body) => request(`/api/crm/contactos/${id}`, { method: 'PUT',    body: JSON.stringify(body) }),
   eliminarContacto:(id)       => request(`/api/crm/contactos/${id}`, { method: 'DELETE' }),

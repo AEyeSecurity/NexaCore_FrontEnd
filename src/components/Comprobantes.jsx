@@ -1,144 +1,20 @@
 import { useState, useEffect, useRef } from 'react'
-import { Upload, Trash2, Eye, RefreshCw, FileText, Image, Plus, Save, X } from 'lucide-react'
+import { Upload, Trash2, Eye, RefreshCw, FileText, Image } from 'lucide-react'
 import { api } from '../lib/api'
-
-const CATEGORIAS = ['Tecnología', 'RRHH', 'Insumos', 'Servicios', 'Inversión', 'Otros']
 
 function fmt(n) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n)
 }
 
-function RegistrarMovimientoPanel({ comprobante, onGuardado, onCancelar }) {
-  const [form, setForm] = useState({
-    tipo: 'Gasto',
-    fecha: comprobante.ocr_fecha || new Date().toISOString().split('T')[0],
-    monto: comprobante.ocr_monto ? String(comprobante.ocr_monto) : '',
-    descripcion: comprobante.ocr_proveedor ? `Compra — ${comprobante.ocr_proveedor}` : '',
-    categoria: 'Insumos',
-    proveedor_cliente: comprobante.ocr_proveedor || '',
-    notas: '',
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
-
-  const handleGuardar = async () => {
-    if (!form.fecha || !form.descripcion || !form.monto) {
-      setError('Completá fecha, descripción y monto.')
-      return
-    }
-    setLoading(true)
-    setError(null)
-    try {
-      const movimiento = await api.crearMovimiento(form)
-      await api.vincularComprobante(comprobante.id, movimiento.id)
-      onGuardado()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="animate-fadeIn">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900 text-sm">Registrar movimiento</h3>
-        <button onClick={onCancelar} className="p-1 rounded hover:bg-gray-100 text-gray-400">
-          <X size={16} />
-        </button>
-      </div>
-
-      {(comprobante.ocr_fecha || comprobante.ocr_monto || comprobante.ocr_proveedor) && (
-        <div className="mb-4 p-3 bg-blue-50 rounded-lg text-xs text-blue-800">
-          <p className="font-medium mb-1">✓ Datos extraídos por OCR — revisá y ajustá si es necesario</p>
-          {comprobante.ocr_fecha && <p>Fecha detectada: {comprobante.ocr_fecha}</p>}
-          {comprobante.ocr_monto && <p>Monto detectado: {fmt(comprobante.ocr_monto)}</p>}
-          {comprobante.ocr_proveedor && <p>Proveedor: {comprobante.ocr_proveedor}</p>}
-        </div>
-      )}
-
-      <div className="flex gap-2 mb-3">
-        {['Ingreso', 'Gasto'].map(t => (
-          <button
-            key={t}
-            onClick={() => set('tipo', t)}
-            className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-all ${
-              form.tipo === t
-                ? t === 'Ingreso'
-                  ? 'bg-green-50 border-green-300 text-green-700'
-                  : 'bg-red-50 border-red-300 text-red-600'
-                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      <div className="space-y-2">
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Fecha *</label>
-            <input type="date" value={form.fecha} onChange={e => set('fecha', e.target.value)}
-              className="input-field text-xs" />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Monto *</label>
-            <input type="number" value={form.monto} onChange={e => set('monto', e.target.value)}
-              placeholder="0.00" className="input-field text-xs" />
-          </div>
-        </div>
-
-        <div>
-          <label className="text-xs text-gray-500 mb-1 block">Descripción *</label>
-          <input type="text" value={form.descripcion} onChange={e => set('descripcion', e.target.value)}
-            placeholder="Ej: Compra cables Mercado Libre" className="input-field text-xs" />
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Categoría</label>
-            <select value={form.categoria} onChange={e => set('categoria', e.target.value)}
-              className="input-field text-xs">
-              {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">
-              {form.tipo === 'Ingreso' ? 'Cliente' : 'Proveedor'}
-            </label>
-            <input type="text" value={form.proveedor_cliente}
-              onChange={e => set('proveedor_cliente', e.target.value)}
-              placeholder="Nombre" className="input-field text-xs" />
-          </div>
-        </div>
-
-        {error && <p className="text-xs text-red-600 bg-red-50 p-2 rounded-lg">{error}</p>}
-
-        <div className="flex gap-2 pt-1">
-          <button onClick={onCancelar} className="btn-secondary flex-1 justify-center text-xs py-1.5">
-            Cancelar
-          </button>
-          <button onClick={handleGuardar} disabled={loading}
-            className="btn-primary flex-1 justify-center text-xs py-1.5">
-            <Save size={13} />
-            {loading ? 'Guardando...' : 'Guardar'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function DetallePanel({ comprobante, onRegistrar, onEliminar }) {
+function DetallePanel({ comprobante, onEliminar }) {
   const tieneMovimiento = !!comprobante.movimientos
-  const vencido = !comprobante.url_archivo
+  const vencido = !comprobante.archivo_url
+  const extraccion = comprobante.extraccion || {}
 
   const estadoBadge = (estado) => {
     if (estado === 'procesado') return <span className="badge-ocr">✓ OCR</span>
     if (estado === 'error') return <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-full">Error OCR</span>
+    if (estado === 'requiere_revision') return <span className="badge-pendiente">Requiere revisión</span>
     return <span className="badge-pendiente">Pendiente</span>
   }
 
@@ -153,10 +29,10 @@ function DetallePanel({ comprobante, onRegistrar, onEliminar }) {
           <p className="text-[11px] text-gray-400 mt-1 text-center px-4">El archivo fue eliminado tras 6 meses. Solo se conserva el registro contable.</p>
         </div>
       ) : comprobante.tipo_archivo !== 'application/pdf' ? (
-        <img src={comprobante.url_archivo} alt="Comprobante"
+        <img src={comprobante.archivo_url} alt="Comprobante"
           className="w-full h-44 object-cover rounded-lg mb-4 border border-gray-100" />
       ) : (
-        <a href={comprobante.url_archivo} target="_blank" rel="noreferrer"
+        <a href={comprobante.archivo_url} target="_blank" rel="noreferrer"
           className="flex items-center justify-center h-44 bg-red-50 rounded-lg mb-4 border border-red-100 text-red-600 hover:bg-red-100 transition-colors">
           <div className="text-center">
             <FileText size={28} className="mx-auto mb-1" />
@@ -168,24 +44,24 @@ function DetallePanel({ comprobante, onRegistrar, onEliminar }) {
       <div className="space-y-2 text-sm mb-4">
         <div className="flex justify-between items-center">
           <span className="text-gray-500 text-xs">Estado OCR</span>
-          {estadoBadge(comprobante.ocr_estado)}
+          {estadoBadge(comprobante.estado_analisis)}
         </div>
-        {comprobante.ocr_fecha && (
+        {extraccion.issueDate && (
           <div className="flex justify-between">
             <span className="text-gray-500 text-xs">Fecha extraída</span>
-            <span className="text-xs font-medium">{comprobante.ocr_fecha}</span>
+            <span className="text-xs font-medium">{extraccion.issueDate}</span>
           </div>
         )}
-        {comprobante.ocr_monto && (
+        {extraccion.total && (
           <div className="flex justify-between">
             <span className="text-gray-500 text-xs">Monto extraído</span>
-            <span className="text-xs font-medium">{fmt(comprobante.ocr_monto)}</span>
+            <span className="text-xs font-medium">{fmt(extraccion.total)}</span>
           </div>
         )}
-        {comprobante.ocr_proveedor && (
+        {extraccion.issuer?.name && (
           <div className="flex justify-between">
             <span className="text-gray-500 text-xs">Proveedor</span>
-            <span className="text-xs font-medium truncate max-w-[130px] text-right">{comprobante.ocr_proveedor}</span>
+            <span className="text-xs font-medium truncate max-w-[130px] text-right">{extraccion.issuer.name}</span>
           </div>
         )}
         <div className="flex justify-between pt-2 border-t border-gray-100">
@@ -203,24 +79,49 @@ function DetallePanel({ comprobante, onRegistrar, onEliminar }) {
         </div>
       </div>
 
-      {comprobante.ocr_texto && (
+      {comprobante.estado_analisis !== 'procesado' && comprobante.diagnostico?.errors?.length > 0 && (
         <div className="mb-4">
-          <p className="text-xs font-medium text-gray-500 mb-1">Texto extraído (OCR)</p>
-          <div className="bg-gray-50 rounded-lg p-2 text-xs text-gray-600 max-h-24 overflow-y-auto font-mono leading-relaxed">
-            {comprobante.ocr_texto}
+          <p className="text-xs font-medium text-gray-500 mb-1">Diagnóstico</p>
+          <ul className="bg-amber-50 rounded-lg p-2 text-xs text-amber-700 space-y-0.5 list-disc list-inside">
+            {comprobante.diagnostico.errors.map((e, i) => <li key={i}>{e}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {comprobante.duplicate_of_id && (
+        <p className="mb-4 text-xs text-amber-600 bg-amber-50 rounded-lg p-2">
+          Posible duplicado de otro comprobante ya cargado.
+        </p>
+      )}
+
+      {comprobante.comprobante_items?.length > 0 && (
+        <div className="mb-4">
+          <p className="text-xs font-medium text-gray-500 mb-1">Renglones</p>
+          <div className="bg-gray-50 rounded-lg p-2 max-h-32 overflow-y-auto">
+            <table className="w-full text-xs">
+              <tbody>
+                {comprobante.comprobante_items.map(item => (
+                  <tr key={item.id} className="border-b border-gray-100 last:border-0">
+                    <td className="py-1 pr-2 text-gray-600 truncate max-w-[100px]">{item.descripcion}</td>
+                    <td className="py-1 pr-2 text-gray-400 text-right whitespace-nowrap">{item.cantidad ?? ''}</td>
+                    <td className="py-1 text-gray-700 text-right whitespace-nowrap">{fmt(item.importe)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
       <div className="space-y-2">
         {!tieneMovimiento && !vencido && (
-          <button onClick={onRegistrar} className="btn-primary w-full justify-center">
-            <Plus size={15} /> Registrar como ingreso / gasto
-          </button>
+          <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2">
+            Este comprobante no generó un movimiento. Registrá el ingreso o gasto manualmente desde el módulo de Movimientos usando los datos de arriba como referencia.
+          </p>
         )}
         <div className="flex gap-2">
           {!vencido && (
-            <a href={comprobante.url_archivo} target="_blank" rel="noreferrer"
+            <a href={comprobante.archivo_url} target="_blank" rel="noreferrer"
               className="btn-secondary flex-1 justify-center text-xs">
               <Eye size={13} /> Ver archivo
             </a>
@@ -239,7 +140,6 @@ export default function Comprobantes() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [selected, setSelected] = useState(null)
-  const [registrando, setRegistrando] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const fileRef = useRef()
 
@@ -271,7 +171,6 @@ export default function Comprobantes() {
       const res = await api.subirComprobante(fd)
       await cargar()
       setSelected(res.comprobante)
-      setRegistrando(true)
     } catch (err) {
       alert(err.message)
     } finally {
@@ -284,7 +183,7 @@ export default function Comprobantes() {
     try {
       await api.eliminarComprobante(c.id)
       setConfirmDelete(null)
-      if (selected?.id === c.id) { setSelected(null); setRegistrando(false) }
+      if (selected?.id === c.id) { setSelected(null) }
       cargar()
     } catch (err) {
       alert(err.message)
@@ -294,6 +193,7 @@ export default function Comprobantes() {
   const estadoBadge = (estado) => {
     if (estado === 'procesado') return <span className="badge-ocr">✓ OCR</span>
     if (estado === 'error') return <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-full">Error</span>
+    if (estado === 'requiere_revision') return <span className="badge-pendiente">Requiere revisión</span>
     return <span className="badge-pendiente">Pendiente</span>
   }
 
@@ -336,14 +236,14 @@ export default function Comprobantes() {
                   {items.map(c => (
                     <tr
                       key={c.id}
-                      onClick={() => { setSelected(c); setRegistrando(false) }}
+                      onClick={() => setSelected(c)}
                       className={`border-b border-gray-50 cursor-pointer transition-colors group ${
                         selected?.id === c.id ? 'bg-primary-50' : 'hover:bg-gray-50'
                       }`}
                     >
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
-                          {c.url_archivo ? (
+                          {c.archivo_url ? (
                             <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
                               c.tipo_archivo === 'application/pdf' ? 'bg-red-100' : 'bg-blue-100'
                             }`}>
@@ -358,13 +258,13 @@ export default function Comprobantes() {
                           )}
                           <div className="min-w-0">
                             <span className="font-medium text-gray-900 truncate max-w-[130px] text-xs block">{c.nombre_archivo}</span>
-                            {!c.url_archivo && (
+                            {!c.archivo_url && (
                               <span className="text-[10px] text-amber-600 font-medium">Vencido</span>
                             )}
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4">{estadoBadge(c.ocr_estado)}</td>
+                      <td className="py-3 px-4">{estadoBadge(c.estado_analisis)}</td>
                       <td className="py-3 px-4 text-xs">
                         {c.movimientos ? (
                           <div className="flex items-center gap-1.5">
@@ -375,12 +275,7 @@ export default function Comprobantes() {
                             <span className="text-gray-600 truncate max-w-[80px]">{c.movimientos.descripcion}</span>
                           </div>
                         ) : (
-                          <button
-                            onClick={e => { e.stopPropagation(); setSelected(c); setRegistrando(true) }}
-                            className="text-amber-600 hover:text-amber-700 font-medium flex items-center gap-1 text-xs"
-                          >
-                            <Plus size={11} /> Registrar
-                          </button>
+                          <span className="text-amber-600 font-medium text-xs">Sin registrar</span>
                         )}
                       </td>
                       <td className="py-3 px-4 text-gray-500 text-xs whitespace-nowrap">
@@ -444,16 +339,9 @@ export default function Comprobantes() {
           </button>
 
           <div className="card p-5">
-          {selected && registrando ? (
-            <RegistrarMovimientoPanel
-              comprobante={selected}
-              onGuardado={() => { setRegistrando(false); cargar() }}
-              onCancelar={() => setRegistrando(false)}
-            />
-          ) : selected ? (
+          {selected ? (
             <DetallePanel
               comprobante={selected}
-              onRegistrar={() => setRegistrando(true)}
               onEliminar={() => setConfirmDelete(selected)}
             />
           ) : (

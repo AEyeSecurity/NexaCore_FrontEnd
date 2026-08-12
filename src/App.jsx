@@ -5,6 +5,7 @@ import Login from './components/Login'
 import Home from './components/Home'
 import Layout from './components/Layout'
 import Dashboard from './components/Dashboard'
+import DashboardHub from './components/dashboard/DashboardHub'
 import FinanceModule from './modules/finance/FinanceModule'
 import OperationsModule from './modules/operations/OperationsModule'
 import CrmModule from './modules/crm/CrmModule'
@@ -23,12 +24,6 @@ function ComingSoon({ title }) {
       </div>
     </div>
   )
-}
-
-const ROLE_DEFAULT_PAGE = {
-  'Operativo': 'operations',
-  'Contable':  'finance',
-  'Comercial': 'crm',
 }
 
 export default function App() {
@@ -69,10 +64,6 @@ export default function App() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const navigate = (targetPage, opts = {}) => {
-    if (targetPage === 'dashboard' && user?.role && ROLE_DEFAULT_PAGE[user.role]) {
-      setPage(ROLE_DEFAULT_PAGE[user.role])
-      return
-    }
     // Al navegar a Finance, registrar el tab inicial si se indica; limpiar si no
     if (targetPage === 'finance') {
       setFinanceInitialTab(opts?.tab ?? null)
@@ -117,7 +108,7 @@ export default function App() {
 
   return (
     <Layout page={page} onNavigate={navigate} user={user} onLogout={handleLogout}>
-      {page === 'dashboard'     && <Dashboard onNavigate={navigate} />}
+      {page === 'dashboard'     && <DashboardHub onNavigate={navigate} user={user} />}
       {page === 'finance'       && <FinanceModule user={user} initialTab={financeInitialTab} />}
       {page === 'operations'    && <OperationsModule user={user} />}
       {page === 'crm'           && <CrmModule />}
