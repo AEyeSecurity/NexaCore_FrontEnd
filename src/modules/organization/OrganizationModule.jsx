@@ -1139,7 +1139,7 @@ export default function OrganizationModule({ user }) {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="font-serif text-[20px] font-semibold text-gray-900">Organización y Permisos</h1>
+          <h1 className="font-sans text-[20px] font-semibold text-gray-900">Organización y Permisos</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">Gestioná la estructura organizacional, roles y permisos del sistema</p>
         </div>
         {isSuperadmin && (

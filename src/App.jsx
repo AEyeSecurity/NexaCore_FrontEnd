@@ -19,7 +19,7 @@ function ComingSoon({ title }) {
   return (
     <div className="fade-in flex items-center justify-center h-64">
       <div className="text-center">
-        <p className="font-serif text-[20px] font-semibold text-gray-700">{title}</p>
+        <p className="font-sans text-[20px] font-semibold text-gray-700">{title}</p>
         <p className="text-[13.5px] text-gray-400 mt-2">Módulo en construcción</p>
       </div>
     </div>

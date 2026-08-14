@@ -270,7 +270,7 @@ export default function Layout({ children, page, onNavigate, user, onLogout }) {
             <button className="md:hidden p-1.5 rounded-lg hover:bg-gray-100" onClick={() => setMobileOpen(true)}>
               <Menu size={20} />
             </button>
-            <span className="font-serif font-semibold text-[17px] text-gray-900">
+            <span className={`${['dashboard', 'finance', 'operations', 'crm', 'planification', 'protocolos', 'reportes', 'usuarios', 'organizacion', 'settings'].includes(page) ? 'font-sans' : 'font-serif'} font-semibold text-[17px] text-gray-900`}>
               {MODULE_LABELS[page] || 'NexaCore'}
             </span>
           </div>

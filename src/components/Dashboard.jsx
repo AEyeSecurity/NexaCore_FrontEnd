@@ -206,7 +206,7 @@ export default function Dashboard({ user }) {
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-serif text-[21px] font-semibold text-gray-900">{dashboardName}</h1>
+          <h1 className="font-sans text-[21px] font-semibold text-gray-900">{dashboardName}</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">NexaCore · {mesLabel}</p>
         </div>
         <div className="flex items-center gap-2.5">

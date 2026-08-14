@@ -25,7 +25,7 @@ export default function CrmModule() {
     <div className="fade-in space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-serif text-[20px] font-semibold text-gray-900">CRM</h2>
+          <h2 className="font-sans text-[20px] font-semibold text-gray-900">CRM</h2>
           <p className="text-[13px] text-gray-500 mt-0.5">Contactos, clientes y prospectos</p>
         </div>
         <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-[13px] font-medium shadow-sm"

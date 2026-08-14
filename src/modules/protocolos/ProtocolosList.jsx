@@ -64,7 +64,7 @@ export default function ProtocolosList({ onOpenProtocolo }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-serif text-[20px] font-semibold text-gray-900">Protocolos</h2>
+          <h2 className="font-sans text-[20px] font-semibold text-gray-900">Protocolos</h2>
           <p className="text-[13px] text-gray-500 mt-0.5">
             Checklists estáticas para procesos repetitivos — pruebas, instalaciones, inicializaciones y RR.HH.
           </p>

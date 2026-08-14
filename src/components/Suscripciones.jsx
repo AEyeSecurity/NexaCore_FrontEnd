@@ -234,7 +234,7 @@ export default function Suscripciones() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-serif text-[20px] font-semibold text-gray-900">Suscripciones</h2>
+          <h2 className="font-sans text-[20px] font-semibold text-gray-900">Suscripciones</h2>
           <p className="text-[13px] text-gray-500 mt-0.5">
             {items.length} registro{items.length !== 1 ? 's' : ''} · {activas.length} activa{activas.length !== 1 ? 's' : ''}
           </p>

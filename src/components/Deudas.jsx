@@ -205,7 +205,7 @@ export default function Deudas() {
     <div className="fade-in space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-serif text-[20px] font-semibold text-gray-900">Deudas & Obligaciones</h2>
+          <h2 className="font-sans text-[20px] font-semibold text-gray-900">Deudas & Obligaciones</h2>
           <p className="text-[13px] text-gray-500 mt-0.5">
             {pendientes.length} pendiente{pendientes.length !== 1 ? 's' : ''} · Total:{' '}
             <span className="font-semibold text-red-500">{fmt(totalPendiente)}</span>

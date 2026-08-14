@@ -138,7 +138,7 @@ export default function Usuarios({ user }) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-serif text-[20px] font-semibold text-gray-900">Gestión de usuarios</h2>
+          <h2 className="font-sans text-[20px] font-semibold text-gray-900">Gestión de usuarios</h2>
           <p className="text-[13px] text-gray-500 mt-0.5">
             {loading ? '…' : `${usuarios.length} usuarios registrados`}
           </p>
