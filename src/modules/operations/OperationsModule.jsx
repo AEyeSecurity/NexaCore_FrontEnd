@@ -906,7 +906,7 @@ export default function OperationsModule({ user }) {
       {/* ── Encabezado ── */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-serif text-[20px] font-semibold text-gray-900">Operativo</h2>
+          <h2 className="font-sans text-[20px] font-semibold text-gray-900">Operativo</h2>
           <p className="text-[13px] text-gray-500 mt-0.5">Gestión de tareas y procesos internos</p>
         </div>
         <div className="flex items-center gap-2">

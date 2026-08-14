@@ -156,7 +156,8 @@ export default function FormMovimiento({ tipo, movimiento, onClose, onSaved, cat
   const esDuplicadoOCR = !!(ocrData?.analysis?.duplicate_of_id || ocrData?.comprobante?.duplicate_of_id)
   const movimientoGeneradoOCR = ocrData?.movimiento || null
   const ocrProcesadoConMovimiento = estadoAnalisisOCR === 'procesado' && !!movimientoGeneradoOCR?.id
-  const comprobanteSinMovimiento = !movimiento && !!ocrData && !ocrProcesadoConMovimiento
+  const comprobanteRequiereRevision = estadoAnalisisOCR === 'requiere_revision'
+  const comprobanteSinMovimiento = !movimiento && !!ocrData && !ocrProcesadoConMovimiento && !comprobanteRequiereRevision
 
   const handleSubmit = async () => {
     // Validaciones frontend con trim
@@ -222,7 +223,7 @@ export default function FormMovimiento({ tipo, movimiento, onClose, onSaved, cat
     <AppModal onClose={onClose} maxWidth="max-w-lg">
       {/* Header */}
       <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
-        <h2 className="font-serif font-semibold text-gray-900 text-[16px]">
+        <h2 className="font-sans font-semibold text-gray-900 text-[16px]">
           {movimiento ? 'Editar' : 'Nuevo'} {form.tipo}
         </h2>
         <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">

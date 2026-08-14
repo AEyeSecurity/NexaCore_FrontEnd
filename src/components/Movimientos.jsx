@@ -1029,7 +1029,7 @@ export default function Movimientos({ tipo, openForm, onFormClose, titulo, titul
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-serif text-[20px] font-semibold text-gray-900">{tituloMostrado}</h2>
+          <h2 className="font-sans text-[20px] font-semibold text-gray-900">{tituloMostrado}</h2>
           <p className="text-[13px] text-gray-500 mt-0.5">
             {totales.count} registros
             {!todos && (
