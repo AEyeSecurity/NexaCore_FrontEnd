@@ -54,7 +54,7 @@ export function useDashboardMetrics(visibleWidgetIds, mes, anio) {
     const periods = trailingPeriods(mes, anio, count)
     finish(
       Promise.all(periods.map(p => cfg.fetch({ mes: p.mes, anio: p.anio })))
-        .then(monthly => cfg.aggregate ? cfg.aggregate(monthly) : monthly[0])
+        .then(monthly => cfg.aggregate ? cfg.aggregate(monthly, periods) : monthly[0])
     )
   }, [])
 

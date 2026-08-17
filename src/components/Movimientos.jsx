@@ -1202,7 +1202,7 @@ export default function Movimientos({ tipo, openForm, onFormClose, titulo, titul
                     {!todos && (
                       <button onClick={() => { setEditItem(null); setShowForm(true) }}
                         className={btnPrimary + ' mt-4 mx-auto'} style={{ background: '#0F6E56' }}>
-                        <Plus size={15} /> Registrar primera {tituloMostrado.toLowerCase().replace(/s$/, '')}
+                        <Plus size={15} /> Registrar primera {(tituloSingular || tituloMostrado.replace(/s$/, '')).toLowerCase()}
                       </button>
                     )}
                   </td></tr>
