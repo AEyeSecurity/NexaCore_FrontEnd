@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Upload, Trash2, Eye, RefreshCw, FileText, Image } from 'lucide-react'
 import { api } from '../lib/api'
+import AppModal from './AppModal'
 
 function fmt(n) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n)
@@ -357,9 +358,8 @@ export default function Comprobantes() {
       </div>
 
       {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setConfirmDelete(null)} />
-          <div className="relative bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full animate-fadeIn">
+        <AppModal onClose={() => setConfirmDelete(null)} maxWidth="max-w-sm">
+          <div className="p-6">
             <h3 className="font-semibold text-gray-900 mb-2">¿Eliminar comprobante?</h3>
             <p className="text-sm text-gray-600 mb-4">
               Se eliminará "<span className="font-medium">{confirmDelete.nombre_archivo}</span>". El movimiento vinculado no se elimina.
@@ -372,7 +372,7 @@ export default function Comprobantes() {
               </button>
             </div>
           </div>
-        </div>
+        </AppModal>
       )}
     </div>
   )

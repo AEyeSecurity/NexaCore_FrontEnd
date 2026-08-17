@@ -5,6 +5,8 @@ import {
 import { api } from '../../lib/api'
 import { formatK, fmtARS } from './format'
 
+const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
 // Módulos reales (slugs) tal como los define el backend en la tabla `modulos`
 // y en dashboard/config/widgets.js. Solo se usan para agrupar visualmente el
 // panel de edición — el permiso real llega en `allowedModules` desde
@@ -30,7 +32,7 @@ export const WIDGET_GROUPS = {
   'finance-movimientos': {
     supportsPeriod: true,
     fetch: (params) => api.getMetricas(params),
-    aggregate: (monthly) => {
+    aggregate: (monthly, periods) => {
       const ingresos = monthly.reduce((s, r) => s + Number(r?.ingresos || 0), 0)
       const gastos   = monthly.reduce((s, r) => s + Number(r?.gastos || 0), 0)
       const catTotals = {}
@@ -39,13 +41,21 @@ export const WIDGET_GROUPS = {
           catTotals[c.categoria] = (catTotals[c.categoria] || 0) + Number(c.total || 0)
         })
       })
-      // monthly viene del más reciente al más viejo (trailingPeriods); para
-      // un sparkline se lee de izquierda a derecha, así que se invierte acá.
+      // monthly (y periods) vienen del más reciente al más viejo
+      // (trailingPeriods); para un gráfico se lee de izquierda a derecha,
+      // así que se invierten acá.
       const chronological = [...monthly].reverse()
+      const chronPeriods  = [...(periods || [])].reverse()
       return {
         ingresos,
         gastos,
         balance: ingresos - gastos,
+        // Fecha real de cada punto (primer día del mes) — para ejes de
+        // gráfico que necesiten mostrar el período real, no un índice.
+        serieDates: chronPeriods.map(p => ({
+          fecha: `${p.anio}-${String(p.mes).padStart(2, '0')}-01`,
+          label: MESES_CORTO[p.mes - 1] || '',
+        })),
         serieIngresos: chronological.map(r => Number(r?.ingresos || 0)),
         serieGastos:   chronological.map(r => Number(r?.gastos || 0)),
         serieBalance:  chronological.map(r => Number(r?.ingresos || 0) - Number(r?.gastos || 0)),
@@ -120,14 +130,21 @@ export const WIDGET_CATALOG = {
   finanzas_ingresos_6m: {
     id: 'finanzas_ingresos_6m',
     title: 'Ingresos (últimos 6 meses)',
+    question: '¿Cómo venimos con los ingresos?',
+    subtitle: 'Evolución de ingresos — últimos 6 meses',
     module: 'finance',
     group: 'finance-movimientos',
     periodMonths: 6,
-    type: 'metric',
+    type: 'trend',
     icon: TrendingUp,
     colors: { bg: '#F0FDF9', accent: '#059669', iconBg: '#D1FAE5' },
+    positiveDirection: 'up',
     getValue: (data) => formatK(data?.ingresos),
-    getSeries: (data) => data?.serieIngresos,
+    // Array de {fecha, label, valor} — mismo formato que Gastos (6 meses).
+    getSeries: (data) => (data?.serieDates || []).map((d, i) => ({
+      ...d,
+      valor: data?.serieIngresos?.[i] ?? 0,
+    })),
   },
   finanzas_gastos_mes: {
     id: 'finanzas_gastos_mes',
@@ -144,14 +161,23 @@ export const WIDGET_CATALOG = {
   finanzas_gastos_6m: {
     id: 'finanzas_gastos_6m',
     title: 'Gastos (últimos 6 meses)',
+    question: '¿Cómo venimos con los gastos?',
+    subtitle: 'Evolución de gastos — últimos 6 meses',
     module: 'finance',
     group: 'finance-movimientos',
     periodMonths: 6,
-    type: 'metric',
+    type: 'trend',
     icon: TrendingDown,
     colors: { bg: '#FFF1F2', accent: '#E11D48', iconBg: '#FFE4E6' },
+    positiveDirection: 'down',
     getValue: (data) => formatK(data?.gastos),
-    getSeries: (data) => data?.serieGastos,
+    // Array de {fecha, label, valor} — un punto real por mes, no un índice
+    // sin fecha. Ya viene de datos reales (6 llamadas al endpoint mensual
+    // existente); el día es siempre "01" porque el backend solo da mes/año.
+    getSeries: (data) => (data?.serieDates || []).map((d, i) => ({
+      ...d,
+      valor: data?.serieGastos?.[i] ?? 0,
+    })),
   },
   finanzas_resultado_neto: {
     id: 'finanzas_resultado_neto',
@@ -166,37 +192,45 @@ export const WIDGET_CATALOG = {
   finanzas_resultado_neto_6m: {
     id: 'finanzas_resultado_neto_6m',
     title: 'Resultado neto (últimos 6 meses)',
+    question: 'Balance',
+    subtitle: 'Ingresos menos gastos — últimos 6 meses',
     module: 'finance',
     group: 'finance-movimientos',
     periodMonths: 6,
-    type: 'metric',
+    type: 'trend',
+    chartVariant: 'bar',
     icon: Activity,
     colors: { bg: '#EFF6FF', accent: '#2563EB', iconBg: '#DBEAFE' },
     getValue: (data) => formatK(data?.balance),
-    getSeries: (data) => data?.serieBalance,
+    // El balance puede ser negativo — barras arriba/abajo de cero, no área.
+    getSeries: (data) => (data?.serieDates || []).map((d, i) => ({
+      ...d,
+      valor: data?.serieBalance?.[i] ?? 0,
+    })),
   },
   finanzas_metricas_movimientos: {
     id: 'finanzas_metricas_movimientos',
-    title: 'Resumen de movimientos',
+    title: 'Gastos por categoría',
     module: 'finance',
     group: 'finance-movimientos',
     type: 'detail',
     icon: Receipt,
     colors: { bg: '#F5F3FF', accent: '#6D28D9' },
+    // Todas las categorías con gasto (no un top fijo) y siempre de mayor a
+    // menor — no se asume el orden del backend, se ordena acá para que la
+    // categoría con más gasto quede arriba pase lo que pase.
     getRows: (data) => {
-      const rows = [
-        { label: 'Comprobantes pendientes OCR', value: String(data?.pendientesOCR ?? 0) },
-      ]
       const categorias = Array.isArray(data?.gastosPorCategoria) ? data.gastosPorCategoria : []
-      categorias.slice(0, 3).forEach(c => {
-        rows.push({ label: c.categoria, value: fmtARS(Number(c.total)) })
-      })
-      return rows
+      return categorias
+        .filter(c => Number(c.total) > 0)
+        .slice()
+        .sort((a, b) => Number(b.total) - Number(a.total))
+        .map(c => ({ label: c.categoria, value: fmtARS(Number(c.total)) }))
     },
   },
   finanzas_metricas_movimientos_6m: {
     id: 'finanzas_metricas_movimientos_6m',
-    title: 'Resumen de movimientos (últimos 6 meses)',
+    title: 'Gastos por categoría (últimos 6 meses)',
     module: 'finance',
     group: 'finance-movimientos',
     periodMonths: 6,
@@ -204,14 +238,12 @@ export const WIDGET_CATALOG = {
     icon: Receipt,
     colors: { bg: '#F5F3FF', accent: '#6D28D9' },
     getRows: (data) => {
-      const rows = [
-        { label: 'Comprobantes pendientes OCR', value: String(data?.pendientesOCR ?? 0) },
-      ]
       const categorias = Array.isArray(data?.gastosPorCategoria) ? data.gastosPorCategoria : []
-      categorias.slice(0, 3).forEach(c => {
-        rows.push({ label: c.categoria, value: fmtARS(Number(c.total)) })
-      })
-      return rows
+      return categorias
+        .filter(c => Number(c.total) > 0)
+        .slice()
+        .sort((a, b) => Number(b.total) - Number(a.total))
+        .map(c => ({ label: c.categoria, value: fmtARS(Number(c.total)) }))
     },
   },
   finanzas_metricas_salarios: {

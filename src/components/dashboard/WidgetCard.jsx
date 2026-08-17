@@ -1,5 +1,6 @@
 import { AlertCircle, RefreshCw } from 'lucide-react'
 import Sparkline from './Sparkline'
+import TrendCard from './TrendCard'
 
 function ErrorState({ message, onRetry }) {
   return (
@@ -115,6 +116,8 @@ export default function WidgetCard({ widget, groupState, onRetry }) {
     <div className="h-full rounded-2xl p-5 shadow-sm" style={{ background: widget.colors.bg }}>
       {error ? (
         <ErrorState message={error} onRetry={onRetry} />
+      ) : widget.type === 'trend' ? (
+        <TrendCard widget={widget} data={data} loading={loading} />
       ) : widget.type === 'metric' ? (
         <MetricBody widget={widget} data={data} loading={loading} />
       ) : (
