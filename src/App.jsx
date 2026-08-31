@@ -9,7 +9,6 @@ import DashboardHub from './components/dashboard/DashboardHub'
 import FinanceModule from './modules/finance/FinanceModule'
 import OperationsModule from './modules/operations/OperationsModule'
 import CrmModule from './modules/crm/CrmModule'
-import PlanificationModule from './modules/planification/PlanificationModule'
 import ProtocolosModule from './modules/protocolos/ProtocolosModule'
 import Usuarios from './components/Usuarios'
 import OrganizationModule from './modules/organization/OrganizationModule'
@@ -112,7 +111,6 @@ export default function App() {
       {page === 'finance'       && <FinanceModule user={user} initialTab={financeInitialTab} />}
       {page === 'operations'    && <OperationsModule user={user} />}
       {page === 'crm'           && <CrmModule />}
-      {page === 'planification' && <PlanificationModule />}
       {page === 'protocolos'    && <ProtocolosModule user={user} />}
       {page === 'reportes'      && <ComingSoon title="Reportes" />}
       {page === 'usuarios'      && <Usuarios user={user} />}

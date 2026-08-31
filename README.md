@@ -1,6 +1,6 @@
 # NexaCore Frontend
 
-Aplicación web de gestión empresarial construida con React, Vite, Tailwind CSS y Supabase. Incluye módulos de Finanzas, Operaciones, CRM y Planificación.
+Aplicación web de gestión empresarial construida con React, Vite, Tailwind CSS y Supabase. Incluye módulos de Finanzas, Operaciones, CRM y Protocolos.
 
 ## Tecnologías
 
@@ -157,7 +157,7 @@ Este archivo se copia automáticamente a `dist/` durante el build.
 src/
 ├── components/       # Componentes de UI (Login, Dashboard, Layout, etc.)
 ├── lib/              # Servicios y utilidades (Supabase, API, auth)
-├── modules/          # Módulos por dominio (finance, crm, operations, planification)
+├── modules/          # Módulos por dominio (finance, crm, operations, protocolos, organization)
 ├── utils/            # Validadores y helpers
 ├── App.jsx           # Componente raíz con lógica de rutas
 ├── main.jsx          # Punto de entrada de React
