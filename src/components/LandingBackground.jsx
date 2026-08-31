@@ -1,4 +1,4 @@
-import { TrendingUp, CheckSquare, Layers } from 'lucide-react'
+import { TrendingUp, CheckSquare, ClipboardCheck } from 'lucide-react'
 
 const BAR_HEIGHTS = [30, 55, 42, 70, 48, 65, 38]
 
@@ -123,10 +123,10 @@ export default function LandingBackground() {
         <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10.5 }}>Tareas en curso</span>
       </GlassCard>
 
-      {/* Card 3 — Planificación (bottom-right) */}
+      {/* Card 3 — Protocolos (bottom-right) */}
       <GlassCard
-        title="Planificación"
-        icon={<Layers size={13} />}
+        title="Protocolos"
+        icon={<ClipboardCheck size={13} />}
         style={{ bottom: '17%', right: '7%', width: 176 }}
         animStyle={{ animation: 'landing-float 12s ease-in-out infinite 3.5s' }}
       >
@@ -143,7 +143,7 @@ export default function LandingBackground() {
         <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', marginBottom: 8 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(93,202,165,0.65)' }} />
-          <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10.5 }}>Proyectos activos</span>
+          <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10.5 }}>Protocolos activos</span>
         </div>
       </GlassCard>
 

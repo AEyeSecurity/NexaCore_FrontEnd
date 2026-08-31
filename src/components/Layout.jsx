@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import {
-  LayoutDashboard, TrendingUp, Briefcase, Users, Calendar,
+  LayoutDashboard, TrendingUp, Briefcase, Users,
   BarChart2, Settings, Menu, X, ChevronLeft, ChevronRight,
   Zap, UserCog, LogOut, Home, Building2, ClipboardCheck,
 } from 'lucide-react'
+import { ROLE_PAGES } from '../lib/permissions'
+import { NexiProvider, useNexi } from '../context/NexiContext'
+import NexiWidget from './nexi/NexiWidget'
 
 const NAV = [
   { section: 'PRINCIPAL', items: [
@@ -13,7 +16,6 @@ const NAV = [
     { id: 'finance',       label: 'Finanzas',      icon: TrendingUp },
     { id: 'operations',    label: 'Operativo',     icon: Briefcase  },
     { id: 'crm',           label: 'CRM',           icon: Users      },
-    { id: 'planification', label: 'Planificación', icon: Calendar   },
     { id: 'protocolos',    label: 'Protocolos',    icon: ClipboardCheck },
   ]},
   { section: 'SISTEMA', items: [
@@ -23,32 +25,6 @@ const NAV = [
     { id: 'settings',       label: 'Configuración', icon: Settings   },
   ]},
 ]
-
-const ROLE_PAGES = {
-  'Superadmin': null,
-  'Dirección':  null,
-  'Director':   null,
-  'Operativo':  ['dashboard', 'operations'],
-  'Contable':   ['dashboard', 'finance', 'reportes'],
-  'Comercial':  ['dashboard', 'crm', 'planification'],
-  'Mando Medio': ['dashboard', 'operations', 'crm', 'planification'],
-  'Operario':    ['dashboard', 'operations'],
-  'Auditor / Lector': ['dashboard', 'finance', 'operations', 'crm', 'planification', 'reportes'],
-  'Externo':     ['dashboard'],
-}
-
-const MODULE_LABELS = {
-  dashboard:     'Panel General',
-  finance:       'Módulo Financiero',
-  operations:    'Módulo Operativo',
-  crm:           'CRM — Contactos y Clientes',
-  planification: 'Módulo de Planificación',
-  protocolos:    'Protocolos',
-  reportes:      'Reportes',
-  usuarios:      'Gestión de usuarios',
-  organizacion:  'Organización y Permisos',
-  settings:      'Configuración',
-}
 
 function getInitials(name = '') {
   const parts = name.split(' ').filter(Boolean)
@@ -235,6 +211,23 @@ export default function Layout({ children, page, onNavigate, user, onLogout }) {
   )
 
   return (
+    <NexiProvider user={user} currentPage={page}>
+      <LayoutShell
+        collapsed={collapsed}
+        mobileOpen={mobileOpen}
+        setMobileOpen={setMobileOpen}
+        renderSidebar={renderSidebar}
+      >
+        {children}
+      </LayoutShell>
+    </NexiProvider>
+  )
+}
+
+function LayoutShell({ collapsed, mobileOpen, setMobileOpen, renderSidebar, children }) {
+  const { isOpen } = useNexi()
+
+  return (
     <div className="flex h-screen overflow-hidden" style={{ background: '#eef2f0' }}>
 
       {/* Desktop sidebar */}
@@ -259,20 +252,20 @@ export default function Layout({ children, page, onNavigate, user, onLogout }) {
       )}
 
       {/* Main content */}
-      <div id="app-main" className="relative flex-1 flex flex-col overflow-hidden">
+      <div
+        id="app-main"
+        className={`relative flex-1 flex flex-col overflow-hidden transition-[margin] duration-300 ease-in-out ${isOpen ? 'md:mr-[400px]' : ''}`}
+      >
 
         {/* Topbar */}
         <div
-          className="bg-white border-b h-[58px] flex items-center justify-between px-7 flex-shrink-0 z-10"
-          style={{ borderColor: 'rgba(15,110,86,0.13)' }}
+          className="border-b border-white/[0.08] h-[58px] flex items-center justify-between px-7 flex-shrink-0 z-10"
+          style={{ background: '#04342C' }}
         >
           <div className="flex items-center gap-3">
-            <button className="md:hidden p-1.5 rounded-lg hover:bg-gray-100" onClick={() => setMobileOpen(true)}>
+            <button className="md:hidden p-1.5 rounded-lg hover:bg-white/10 text-white/80" onClick={() => setMobileOpen(true)}>
               <Menu size={20} />
             </button>
-            <span className={`${['dashboard', 'finance', 'operations', 'crm', 'planification', 'protocolos', 'reportes', 'usuarios', 'organizacion', 'settings'].includes(page) ? 'font-sans' : 'font-serif'} font-semibold text-[17px] text-gray-900`}>
-              {MODULE_LABELS[page] || 'NexaCore'}
-            </span>
           </div>
           <div className="flex items-center gap-2">
             <div
@@ -291,6 +284,8 @@ export default function Layout({ children, page, onNavigate, user, onLogout }) {
         </main>
 
       </div>
+
+      <NexiWidget />
     </div>
   )
 }

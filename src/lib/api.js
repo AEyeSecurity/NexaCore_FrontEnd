@@ -215,18 +215,6 @@ export const api = {
   editarContacto:  (id, body) => request(`/api/crm/contactos/${id}`, { method: 'PUT',    body: JSON.stringify(body) }),
   eliminarContacto:(id)       => request(`/api/crm/contactos/${id}`, { method: 'DELETE' }),
 
-  // ── Planification ────────────────────────────────
-  getProyectos: (params = {}) => {
-    const qs = new URLSearchParams(
-      Object.fromEntries(Object.entries(params).filter(([, v]) => v && v !== 'Todos'))
-    ).toString()
-    return request(`/api/planification/proyectos${qs ? `?${qs}` : ''}`)
-  },
-  getMetricasPlanification: () => request('/api/planification/proyectos/metricas'),
-  crearProyecto:   (body)     => request('/api/planification/proyectos',       { method: 'POST',   body: JSON.stringify(body) }),
-  editarProyecto:  (id, body) => request(`/api/planification/proyectos/${id}`, { method: 'PUT',    body: JSON.stringify(body) }),
-  eliminarProyecto:(id)       => request(`/api/planification/proyectos/${id}`, { method: 'DELETE' }),
-
   // ── RBAC ─────────────────────────────────────────
   getUsuariosAsignables: () => request('/api/rbac/usuarios/asignables'),
   getUsuarios:           () => request('/api/rbac/usuarios'),

@@ -42,7 +42,7 @@ const ORIGEN_CONFIG = {
   manual:   { bg: '#F3E8FF', color: '#6B21A8', label: 'Persona externa/manual' },
 }
 
-const MODULOS_PRINCIPALES = ['dashboard','finance','operations','crm','planification','reportes','usuarios','configuracion','organizacion']
+const MODULOS_PRINCIPALES = ['dashboard','finance','operations','crm','reportes','usuarios','configuracion','organizacion']
 
 const inputCls   = 'w-full border rounded-xl px-3 py-2.5 text-[13px] outline-none bg-white transition-colors focus:ring-2 focus:ring-teal-700/10'
 const inputStyle = { borderColor: 'rgba(15,110,86,0.25)' }
@@ -824,7 +824,7 @@ function ModalNodo({ nodo, personas, orgNodes, onSave, onClose, saving }) {
 
 function MatrizPermisos({ usuarios, permisos, modulos, rolPermisos = [], personas }) {
   const modulosFiltrados = modulos.filter(m =>
-    ['dashboard','finance','operations','crm','planification','reportes','usuarios'].includes(m.nombre)
+    ['dashboard','finance','operations','crm','reportes','usuarios'].includes(m.nombre)
   )
 
   // Resuelve el permiso efectivo de un usuario: usuario > rol > sin_acceso

@@ -1,6 +1,6 @@
 import {
   TrendingUp, TrendingDown, Activity, Receipt,
-  Wallet, Users, Briefcase, Calendar,
+  Wallet, Users, Briefcase,
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { formatK, fmtARS } from './format'
@@ -15,7 +15,6 @@ export const MODULE_META = {
   finance:       { label: 'Finanzas',      color: '#0F6E56' },
   crm:           { label: 'CRM',           color: '#DB2777' },
   operations:    { label: 'Operativo',     color: '#D97706' },
-  planification: { label: 'Planificación', color: '#4F46E5' },
 }
 
 // Un "group" agrupa mosaicos que comparten el mismo endpoint fuente, para
@@ -95,13 +94,6 @@ export const WIDGET_GROUPS = {
       enProceso:   monthly.reduce((s, r) => s + Number(r?.enProceso || 0), 0),
       completadas: monthly.reduce((s, r) => s + Number(r?.completadas || 0), 0),
     }),
-  },
-  'planification-proyectos': {
-    // El backend (planificationService.getMetricas) todavía no acepta
-    // mes/anio — no se inventa el filtro, este mosaico no cambia por período
-    // y por eso no tiene variante de "últimos 6 meses" en el catálogo.
-    supportsPeriod: false,
-    fetch: () => api.getMetricasPlanification(),
   },
 }
 
@@ -335,21 +327,6 @@ export const WIDGET_CATALOG = {
       { label: 'Pendientes', value: String(data?.pendientes ?? 0) },
       { label: 'En proceso', value: String(data?.enProceso ?? 0) },
       { label: 'Completadas', value: String(data?.completadas ?? 0) },
-    ],
-  },
-  planificacion_metricas_proyectos: {
-    id: 'planificacion_metricas_proyectos',
-    title: 'Proyectos',
-    module: 'planification',
-    group: 'planification-proyectos',
-    type: 'detail',
-    icon: Calendar,
-    colors: { bg: '#EEF2FF', accent: '#4F46E5' },
-    getRows: (data) => [
-      { label: 'Total proyectos', value: String(data?.total ?? 0) },
-      { label: 'Activos', value: String(data?.activos ?? 0) },
-      { label: 'Completados', value: String(data?.completados ?? 0) },
-      { label: 'Presupuesto total', value: fmtARS(Number(data?.presupuestoTotal ?? 0)) },
     ],
   },
 }
