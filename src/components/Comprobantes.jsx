@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { Upload, Trash2, Eye, RefreshCw, FileText, Image } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Trash2, Eye, RefreshCw, FileText, Image } from 'lucide-react'
 import { api } from '../lib/api'
 import AppModal from './AppModal'
 
@@ -139,10 +139,8 @@ function DetallePanel({ comprobante, onEliminar }) {
 export default function Comprobantes() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
-  const [uploading, setUploading] = useState(false)
   const [selected, setSelected] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
-  const fileRef = useRef()
 
   const cargar = async () => {
     setLoading(true)
@@ -161,24 +159,6 @@ export default function Comprobantes() {
   }
 
   useEffect(() => { cargar() }, [])
-
-  const handleUpload = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    setUploading(true)
-    try {
-      const fd = new FormData()
-      fd.append('archivo', file)
-      const res = await api.subirComprobante(fd)
-      await cargar()
-      setSelected(res.comprobante)
-    } catch (err) {
-      alert(err.message)
-    } finally {
-      setUploading(false)
-      fileRef.current.value = ''
-    }
-  }
 
   const handleDelete = async (c) => {
     try {
@@ -200,18 +180,10 @@ export default function Comprobantes() {
 
   return (
     <div className="animate-fadeIn">
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/jpeg,image/jpg,image/png,application/pdf"
-        onChange={handleUpload}
-        style={{ display: 'none' }}
-      />
-
       <div className="mb-5">
         <h1 className="text-2xl font-bold text-gray-900">Comprobantes</h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          {items.length} archivos · Subí un comprobante y registralo como ingreso o gasto
+          {items.length} archivos · Consultá los comprobantes registrados desde Ingresos y Gastos
         </p>
       </div>
 
@@ -295,15 +267,11 @@ export default function Comprobantes() {
                   {items.length === 0 && (
                     <tr>
                       <td colSpan={5}>
-                        <button
-                          onClick={() => fileRef.current.click()}
-                          disabled={uploading}
-                          className="w-full py-16 text-center text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition-colors group"
-                        >
-                          <Upload size={32} className="mx-auto mb-2 opacity-20 group-hover:opacity-60 transition-opacity" />
+                        <div className="w-full py-16 text-center text-gray-400">
+                          <FileText size={32} className="mx-auto mb-2 opacity-20" />
                           <p className="text-sm font-medium">No hay comprobantes aún</p>
-                          <p className="text-xs mt-1">Hacé clic aquí o usá el botón de arriba para subir una foto o PDF</p>
-                        </button>
+                          <p className="text-xs mt-1">Los comprobantes se cargan al registrar un ingreso o gasto</p>
+                        </div>
                       </td>
                     </tr>
                   )}
@@ -313,33 +281,7 @@ export default function Comprobantes() {
           )}
         </div>
 
-        <div className="flex flex-col gap-4">
-          <button
-            onClick={() => fileRef.current.click()}
-            disabled={uploading}
-            className={`card flex flex-col items-center justify-center gap-3 py-6 w-full border-2 border-dashed transition-all group ${
-              uploading
-                ? 'border-gray-200 opacity-60 cursor-not-allowed'
-                : 'border-primary-300 hover:border-primary-500 hover:bg-primary-50 cursor-pointer'
-            }`}
-          >
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
-              uploading ? 'bg-gray-100' : 'bg-primary-100 group-hover:bg-primary-200'
-            }`}>
-              {uploading
-                ? <RefreshCw size={22} className="animate-spin text-primary-500" />
-                : <Upload size={22} className="text-primary-600" />
-              }
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-semibold text-gray-800">
-                {uploading ? 'Procesando OCR...' : 'Subir comprobante'}
-              </p>
-              {!uploading && <p className="text-xs text-gray-400 mt-0.5">JPG, PNG o PDF</p>}
-            </div>
-          </button>
-
-          <div className="card p-5">
+        <div className="card p-5">
           {selected ? (
             <DetallePanel
               comprobante={selected}
@@ -349,11 +291,10 @@ export default function Comprobantes() {
             <div className="flex flex-col items-center justify-center h-full text-gray-400 py-12">
               <FileText size={36} className="mb-3 opacity-20" />
               <p className="text-sm text-center leading-relaxed">
-                Seleccioná un comprobante para ver el detalle o subí uno nuevo para registrarlo
+                Seleccioná un comprobante para ver el detalle
               </p>
             </div>
           )}
-          </div>
         </div>
       </div>
 

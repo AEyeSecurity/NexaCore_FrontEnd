@@ -27,26 +27,37 @@ import { formatK, fmtARS } from './format'
 const POSITIVO = '#059669'
 const NEGATIVO = '#e34948'
 
-function TooltipContent({ active, payload, color }) {
+function TooltipContent({ active, payload, color, format }) {
   if (!active || !payload?.length) return null
   const { label, valor } = payload[0].payload
   const barColor = typeof color === 'function' ? color(valor) : color
+  const fmt = format || fmtARS
   return (
     <div className="rounded-lg px-2.5 py-1.5 text-[12px] shadow-md bg-white border" style={{ borderColor: 'rgba(15,110,86,0.15)' }}>
       <p className="text-gray-500 capitalize">{label}</p>
-      <p className="font-semibold" style={{ color: barColor }}>{fmtARS(valor)}</p>
+      <p className="font-semibold" style={{ color: barColor }}>{fmt(valor)}</p>
     </div>
   )
 }
 
 export default function TrendCard({ widget, data, loading }) {
   const { icon: Icon, colors } = widget
-  const series = !loading ? widget.getSeries(data) : []
-  const gradientId = `trendFill-${widget.id}`
+  const series = (!loading && widget.getSeries) ? widget.getSeries(data) : []
+  // Único por instancia: dos mosaicos del mismo id no deben compartir el
+  // <linearGradient> del SVG. Se sanea porque instanceId puede traer ":".
+  const gradientId = `trendFill-${String(widget.instanceId || widget.id).replace(/[^\w-]/g, '-')}`
 
+  // En barras categóricas (gastos por categoría, contactos por tipo, tareas
+  // por estado) no hay "tendencia": comparar la primera y la última barra no
+  // significa nada, así que no se muestra el badge de %.
+  const categorical = !!widget.categorical
+  // Contactos / Tareas son conteos; el resto son montos en $.
+  const isCount = widget.valueFormat === 'count'
+  const axisFmt = isCount ? (v) => String(v) : formatK
+  const tipFmt = isCount ? (v) => String(v) : fmtARS
   const first = series[0]?.valor
   const last = series[series.length - 1]?.valor
-  const hasTrend = series.length > 1 && first != null && first !== 0
+  const hasTrend = !categorical && series.length > 1 && first != null && first !== 0
   const trendPct = hasTrend ? Math.round(((last - first) / first) * 100) : null
   const up = trendPct > 0
   // "Arriba" no siempre es bueno (ej. Gastos) — positiveDirection lo declara
@@ -89,7 +100,7 @@ export default function TrendCard({ widget, data, loading }) {
           <div className="h-full flex items-center justify-center text-[12px]" style={{ color: colors.accent, opacity: 0.4 }}>
             Cargando···
           </div>
-        ) : series.length < 2 ? (
+        ) : series.length < 1 ? (
           <div className="h-full flex items-center justify-center text-[12px] text-gray-400">
             Sin datos en el período
           </div>
@@ -98,12 +109,12 @@ export default function TrendCard({ widget, data, loading }) {
             <BarChart data={series} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid horizontal vertical={false} stroke="#e1e0d9" />
               <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#898781' }} axisLine={{ stroke: '#e1e0d9' }} tickLine={false} />
-              <YAxis tick={{ fontSize: 10.5, fill: '#898781' }} axisLine={false} tickLine={false} tickFormatter={formatK} width={48} />
+              <YAxis tick={{ fontSize: 10.5, fill: '#898781' }} axisLine={false} tickLine={false} tickFormatter={axisFmt} width={48} />
               <ReferenceLine y={0} stroke="#c3c2b7" />
-              <Tooltip content={<TooltipContent color={(v) => (v >= 0 ? POSITIVO : NEGATIVO)} />} cursor={{ fill: 'rgba(15,110,86,0.05)' }} />
+              <Tooltip content={<TooltipContent format={tipFmt} color={categorical ? colors.accent : (v) => (v >= 0 ? POSITIVO : NEGATIVO)} />} cursor={{ fill: 'rgba(15,110,86,0.05)' }} />
               <Bar dataKey="valor" radius={[3, 3, 3, 3]} maxBarSize={26} isAnimationActive={false}>
                 {series.map((s, i) => (
-                  <Cell key={i} fill={s.valor >= 0 ? POSITIVO : NEGATIVO} />
+                  <Cell key={i} fill={categorical ? colors.accent : (s.valor >= 0 ? POSITIVO : NEGATIVO)} />
                 ))}
               </Bar>
             </BarChart>
@@ -119,8 +130,8 @@ export default function TrendCard({ widget, data, loading }) {
               </defs>
               <CartesianGrid horizontal vertical={false} stroke="#e1e0d9" />
               <XAxis dataKey="label" tick={{ fontSize: 10.5, fill: '#898781' }} axisLine={{ stroke: '#e1e0d9' }} tickLine={false} />
-              <YAxis tick={{ fontSize: 10.5, fill: '#898781' }} axisLine={false} tickLine={false} tickFormatter={formatK} width={40} />
-              <Tooltip content={<TooltipContent color={colors.accent} />} />
+              <YAxis tick={{ fontSize: 10.5, fill: '#898781' }} axisLine={false} tickLine={false} tickFormatter={axisFmt} width={40} />
+              <Tooltip content={<TooltipContent format={tipFmt} color={colors.accent} />} />
               <Area
                 type="monotone"
                 dataKey="valor"
