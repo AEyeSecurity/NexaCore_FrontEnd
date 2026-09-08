@@ -32,7 +32,13 @@ function MetricBody({ widget, data, loading }) {
   const badgeColor = isFlat ? 'text-gray-500' : isGood ? 'text-emerald-700' : 'text-red-600'
   const sign = isFlat ? '' : up ? '+' : '-'
 
-  const series = !loading && widget.getSeries ? widget.getSeries(data) : null
+  // KPI es un único valor grande (sin sparkline). El mini-gráfico sólo se
+  // usa para el mosaico "metric" legacy que lo declaraba con getSeries.
+  const rawSeries = (!loading && widget.chartType !== 'kpi' && widget.getSeries)
+    ? widget.getSeries(data) : null
+  const series = rawSeries && !widget.categorical
+    ? rawSeries.map(p => (typeof p === 'number' ? p : Number(p?.valor ?? 0)))
+    : null
 
   return (
     <div className="h-full flex flex-col">
@@ -62,7 +68,7 @@ function MetricBody({ widget, data, loading }) {
 
       <div className={series ? '' : 'mt-auto'}>
         <p className="text-[24px] font-bold text-gray-900 leading-none mb-1.5">
-          {loading ? <span style={{ color: colors.accent, opacity: 0.3 }}>···</span> : widget.getValue(data)}
+          {loading ? <span style={{ color: colors.accent, opacity: 0.3 }}>···</span> : (widget.getValue ? widget.getValue(data) : '—')}
         </p>
         <p className="text-[10.5px] font-semibold uppercase tracking-wider" style={{ color: colors.accent }}>
           {widget.title}
@@ -74,7 +80,7 @@ function MetricBody({ widget, data, loading }) {
 
 function DetailBody({ widget, data, loading }) {
   const { icon: Icon, colors } = widget
-  const rows = loading ? [] : widget.getRows(data)
+  const rows = (loading || !widget.getRows) ? [] : widget.getRows(data)
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center gap-2.5 mb-3.5">
@@ -109,20 +115,36 @@ function DetailBody({ widget, data, loading }) {
   )
 }
 
+// Elige el cuerpo del mosaico. Prioridad al `chartType` del nuevo contrato
+// ({ id, size, period, chartType }); si el mosaico no lo trae (config legacy
+// sin resolver), cae al comportamiento anterior por `widget.type`.
+function WidgetBody({ widget, data, loading }) {
+  switch (widget.chartType) {
+    case 'kpi':
+      return <MetricBody widget={widget} data={data} loading={loading} />
+    case 'area':
+      return <TrendCard widget={{ ...widget, chartVariant: 'area' }} data={data} loading={loading} />
+    case 'bar':
+      return <TrendCard widget={{ ...widget, chartVariant: 'bar' }} data={data} loading={loading} />
+    case 'list':
+      return <DetailBody widget={widget} data={data} loading={loading} />
+    default:
+      return widget.type === 'trend'
+        ? <TrendCard widget={widget} data={data} loading={loading} />
+        : widget.type === 'metric'
+          ? <MetricBody widget={widget} data={data} loading={loading} />
+          : <DetailBody widget={widget} data={data} loading={loading} />
+  }
+}
+
 export default function WidgetCard({ widget, groupState, onRetry }) {
   const { loading, error, data } = groupState || { loading: true, error: null, data: null }
 
   return (
     <div className="h-full rounded-2xl p-5 shadow-sm" style={{ background: widget.colors.bg }}>
-      {error ? (
-        <ErrorState message={error} onRetry={onRetry} />
-      ) : widget.type === 'trend' ? (
-        <TrendCard widget={widget} data={data} loading={loading} />
-      ) : widget.type === 'metric' ? (
-        <MetricBody widget={widget} data={data} loading={loading} />
-      ) : (
-        <DetailBody widget={widget} data={data} loading={loading} />
-      )}
+      {error
+        ? <ErrorState message={error} onRetry={onRetry} />
+        : <WidgetBody widget={widget} data={data} loading={loading} />}
     </div>
   )
 }
