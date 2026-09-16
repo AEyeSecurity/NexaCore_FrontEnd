@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   GitBranch, Shield, Layers, Plus, X, ChevronDown,
   Edit2, Save, Loader2, Building2, AlertTriangle,
-  Mail, Phone
+  Mail, Phone, ArrowLeft, Trash2, User, UserPlus, CheckCircle2
 } from 'lucide-react'
 import { api } from '../../lib/api'
 
@@ -216,7 +216,7 @@ function TreeBranch({ node, allNodes, onSelect, selectedId }) {
 
 // ── Componente: panel de detalle del usuario ──────────────────
 
-function UserDetailPanel({ node, permisos, modulos, orgNodes, user, onClose, onEditPermisos, onEditNodo }) {
+function UserDetailPanel({ node, permisos, modulos, orgNodes, user, onClose, onEditPermisos, onEditNodo, onQuitarNodo }) {
   const [detailTab, setDetailTab] = useState('permisos')
   const persona = getNodePersona(node)
   const origen  = getNodeOrigen(node)
@@ -449,6 +449,20 @@ function UserDetailPanel({ node, permisos, modulos, orgNodes, user, onClose, onE
           </div>
         )}
       </div>
+
+      {/* Zona de acciones destructivas */}
+      {isSuperadmin && (
+        <div className="p-4 border-t" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
+          <button
+            onClick={() => onQuitarNodo(node)}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-[12px] font-medium border transition-colors hover:bg-red-50"
+            style={{ borderColor: 'rgba(239,68,68,0.3)', color: '#DC2626' }}
+          >
+            <Trash2 size={13} />
+            Quitar del organigrama
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -592,6 +606,14 @@ function ModalNodo({ nodo, personas, orgNodes, onSave, onClose, saving }) {
   const [personaKeySel, setPersonaKeySel] = useState('')
   const [origenFiltro, setOrigenFiltro]   = useState('todos')
   const [modoPersona, setModoPersona]     = useState('existente') // 'existente' | 'manual'
+  // Al crear, el modal arranca en la pantalla de selección de tipo de persona.
+  // Al editar no aplica (no se puede cambiar la persona de un nodo existente).
+  const [step, setStep] = useState(isEdit ? 'form' : 'tipo') // 'tipo' | 'form'
+
+  const handleSelectTipo = (tipo) => {
+    setModoPersona(tipo)
+    setStep('form')
+  }
 
   const f = (k, v) => setForm(prev => ({ ...prev, [k]: v }))
 
@@ -620,15 +642,22 @@ function ModalNodo({ nodo, personas, orgNodes, onSave, onClose, saving }) {
 
   const handleGuardar = () => {
     // Persona manual/externa: no se envían usuario_id/empleado_id, solo los *_manual.
+    // El tipo de persona ya se definió en la pantalla inicial, así que es_externo
+    // se deriva de esa elección en vez de un checkbox manual.
     if (!isEdit && modoPersona === 'manual') {
       const { usuario_id, empleado_id, ...resto } = form
       onSave({
         ...resto,
+        es_externo: true,
         nombre_manual:   form.nombre_manual.trim(),
         apellido_manual: form.apellido_manual.trim() || null,
         email_manual:    form.email_manual.trim()    || null,
         telefono_manual: form.telefono_manual.trim() || null,
       })
+      return
+    }
+    if (!isEdit) {
+      onSave({ ...form, es_externo: false })
       return
     }
     onSave(form)
@@ -645,31 +674,53 @@ function ModalNodo({ nodo, personas, orgNodes, onSave, onClose, saving }) {
         </div>
 
         <div className="overflow-y-auto max-h-[65vh] p-5 space-y-4">
-          {/* Persona (usuario del sistema, empleado de Sueldos, o carga manual/externa) */}
-          {!isEdit && (
+          {/* Pantalla inicial: elegir tipo de persona (solo al crear) */}
+          {!isEdit && step === 'tipo' && (
             <div>
-              <label className="block text-[12px] font-medium text-gray-600 mb-1.5">Persona *</label>
-
-              <div className="flex gap-1.5 mb-2">
-                <button type="button" onClick={() => setModoPersona('existente')}
-                  className="px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors"
-                  style={modoPersona === 'existente'
-                    ? { background: '#0F6E56', borderColor: '#0F6E56', color: '#fff' }
-                    : { background: '#fff', borderColor: 'rgba(15,110,86,0.2)', color: '#4B5563' }
-                  }
+              <p className="text-[13px] font-medium text-gray-700 mb-3">¿Qué tipo de persona querés agregar?</p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleSelectTipo('existente')}
+                  className="text-left p-4 rounded-2xl border-2 transition-colors hover:border-[#0F6E56]"
+                  style={{ borderColor: 'rgba(15,110,86,0.15)' }}
                 >
-                  Persona existente
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center mb-2.5" style={{ background: '#E1F5EE' }}>
+                    <User size={16} style={{ color: '#0F6E56' }} />
+                  </div>
+                  <p className="text-[13px] font-semibold text-gray-800">Persona existente</p>
+                  <p className="text-[11px] text-gray-500 mt-1">Seleccioná un usuario o empleado que ya forma parte del sistema.</p>
                 </button>
-                <button type="button" onClick={() => setModoPersona('manual')}
-                  className="px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors"
-                  style={modoPersona === 'manual'
-                    ? { background: '#0F6E56', borderColor: '#0F6E56', color: '#fff' }
-                    : { background: '#fff', borderColor: 'rgba(15,110,86,0.2)', color: '#4B5563' }
-                  }
+                <button
+                  type="button"
+                  onClick={() => handleSelectTipo('manual')}
+                  className="text-left p-4 rounded-2xl border-2 transition-colors hover:border-[#0F6E56]"
+                  style={{ borderColor: 'rgba(15,110,86,0.15)' }}
                 >
-                  Persona externa / manual
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center mb-2.5" style={{ background: '#F3E8FF' }}>
+                    <UserPlus size={16} style={{ color: '#6B21A8' }} />
+                  </div>
+                  <p className="text-[13px] font-semibold text-gray-800">Persona externa</p>
+                  <p className="text-[11px] text-gray-500 mt-1">Agregá manualmente una persona que no posee usuario en el sistema.</p>
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Persona (usuario del sistema, empleado de Sueldos, o carga manual/externa) */}
+          {!isEdit && step === 'form' && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setStep('tipo')}
+                className="flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-[#0F6E56] transition-colors mb-3"
+              >
+                <ArrowLeft size={12} /> Volver
+              </button>
+
+              <label className="block text-[12px] font-medium text-gray-600 mb-1.5">
+                {modoPersona === 'existente' ? 'Persona existente *' : 'Persona externa *'}
+              </label>
 
               {modoPersona === 'existente' ? (
                 <>
@@ -732,73 +783,69 @@ function ModalNodo({ nodo, personas, orgNodes, onSave, onClose, saving }) {
             </div>
           )}
 
-          {/* Nivel */}
-          <div>
-            <label className="block text-[12px] font-medium text-gray-600 mb-1.5">Nivel *</label>
-            <select value={form.nivel} onChange={e => f('nivel', e.target.value)}
-              className={selectCls} style={inputStyle}>
-              {NIVELES.map(n => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </div>
+          {(isEdit || step === 'form') && (
+            <>
+              {/* Nivel */}
+              <div>
+                <label className="block text-[12px] font-medium text-gray-600 mb-1.5">Nivel *</label>
+                <select value={form.nivel} onChange={e => f('nivel', e.target.value)}
+                  className={selectCls} style={inputStyle}>
+                  {NIVELES.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
 
-          {/* Superior jerárquico */}
-          <div>
-            <label className="block text-[12px] font-medium text-gray-600 mb-1.5">Reporta a (superior directo)</label>
-            <select value={form.superior_id} onChange={e => f('superior_id', e.target.value)}
-              className={selectCls} style={inputStyle}>
-              <option value="">— Raíz (sin superior) —</option>
-              {posiblesSuperiores.map(n => (
-                <option key={n.id} value={n.id}>
-                  {getNodePersona(n).nombre} – {n.nivel}
-                </option>
-              ))}
-            </select>
-          </div>
+              {/* Superior jerárquico */}
+              <div>
+                <label className="block text-[12px] font-medium text-gray-600 mb-1.5">Reporta a (superior directo)</label>
+                <select value={form.superior_id} onChange={e => f('superior_id', e.target.value)}
+                  className={selectCls} style={inputStyle}>
+                  <option value="">— Raíz (sin superior) —</option>
+                  {posiblesSuperiores.map(n => (
+                    <option key={n.id} value={n.id}>
+                      {getNodePersona(n).nombre} – {n.nivel}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          {/* Cargo y Área */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[12px] font-medium text-gray-600 mb-1.5">Cargo</label>
-              <input value={form.cargo} onChange={e => f('cargo', e.target.value)}
-                className={inputCls} style={inputStyle} placeholder="Ej: CFO" />
-            </div>
-            <div>
-              <label className="block text-[12px] font-medium text-gray-600 mb-1.5">Área</label>
-              <input value={form.area} onChange={e => f('area', e.target.value)}
-                className={inputCls} style={inputStyle} placeholder="Ej: Finanzas" />
-            </div>
-          </div>
+              {/* Cargo y Área */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-600 mb-1.5">Cargo</label>
+                  <input value={form.cargo} onChange={e => f('cargo', e.target.value)}
+                    className={inputCls} style={inputStyle} placeholder="Ej: CFO" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-600 mb-1.5">Área</label>
+                  <input value={form.area} onChange={e => f('area', e.target.value)}
+                    className={inputCls} style={inputStyle} placeholder="Ej: Finanzas" />
+                </div>
+              </div>
 
-          {/* Fechas */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[12px] font-medium text-gray-600 mb-1.5">Fecha de ingreso</label>
-              <input type="date" value={form.fecha_inicio} onChange={e => f('fecha_inicio', e.target.value)}
-                className={inputCls} style={inputStyle} />
-            </div>
-            <div>
-              <label className="block text-[12px] font-medium text-gray-600 mb-1.5">
-                Vencimiento
-                <span className="text-gray-400 font-normal ml-1">(solo externos)</span>
-              </label>
-              <input type="date" value={form.fecha_fin} onChange={e => f('fecha_fin', e.target.value)}
-                className={inputCls} style={inputStyle} />
-            </div>
-          </div>
+              {/* Fechas */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-600 mb-1.5">Fecha de ingreso</label>
+                  <input type="date" value={form.fecha_inicio} onChange={e => f('fecha_inicio', e.target.value)}
+                    className={inputCls} style={inputStyle} />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-600 mb-1.5">
+                    Vencimiento
+                    <span className="text-gray-400 font-normal ml-1">(solo externos)</span>
+                  </label>
+                  <input type="date" value={form.fecha_fin} onChange={e => f('fecha_fin', e.target.value)}
+                    className={inputCls} style={inputStyle} />
+                </div>
+              </div>
 
-          {/* Externo */}
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input type="checkbox" checked={form.es_externo}
-              onChange={e => f('es_externo', e.target.checked)}
-              className="w-4 h-4 rounded accent-teal-700" />
-            <span className="text-[12px] text-gray-600">Es una persona externa</span>
-          </label>
-
-          {form.fecha_fin && (
-            <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 text-amber-700 text-[11px]">
-              <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-              El nodo será desactivado automáticamente al vencer la fecha indicada.
-            </div>
+              {form.fecha_fin && (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 text-amber-700 text-[11px]">
+                  <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                  El nodo será desactivado automáticamente al vencer la fecha indicada.
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -808,11 +855,54 @@ function ModalNodo({ nodo, personas, orgNodes, onSave, onClose, saving }) {
             style={{ borderColor: 'rgba(15,110,86,0.25)', color: '#4B5563' }}>
             Cancelar
           </button>
-          <button onClick={handleGuardar} disabled={saving || !personaValida}
-            className="flex items-center gap-2 px-5 py-2 rounded-xl text-[13px] text-white font-medium transition-colors disabled:opacity-50"
-            style={{ background: '#0F6E56' }}>
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            {isEdit ? 'Actualizar' : 'Agregar'}
+          {(isEdit || step === 'form') && (
+            <button onClick={handleGuardar} disabled={saving || !personaValida}
+              className="flex items-center gap-2 px-5 py-2 rounded-xl text-[13px] text-white font-medium transition-colors disabled:opacity-50"
+              style={{ background: '#0F6E56' }}>
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              {isEdit ? 'Actualizar' : 'Agregar'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Componente: confirmación para quitar un nodo del organigrama ──
+
+function ModalConfirmQuitarNodo({ node, removing, onConfirm, onClose }) {
+  const persona = getNodePersona(node)
+  const esManual = getNodeOrigen(node) === 'manual'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.35)' }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+        <div className="p-5">
+          <div className="flex items-center gap-2.5 mb-3">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#FEE2E2' }}>
+              <Trash2 size={16} style={{ color: '#DC2626' }} />
+            </div>
+            <p className="text-[15px] font-semibold text-gray-900">¿Quitar del organigrama?</p>
+          </div>
+          <p className="text-[13px] text-gray-600 leading-relaxed">
+            {esManual
+              ? <>Esta acción quitará a <strong>{persona.nombre}</strong> del organigrama. Al tratarse de una persona externa cargada manualmente, también se eliminarán los datos asociados a este registro del organigrama.</>
+              : <>Esta acción quitará a <strong>{persona.nombre}</strong> del organigrama. Su usuario, información y datos dentro del sistema no serán eliminados.</>
+            }
+          </p>
+        </div>
+        <div className="flex justify-end gap-3 p-4 border-t" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
+          <button onClick={onClose} disabled={removing}
+            className="px-4 py-2 rounded-xl text-[13px] border transition-colors hover:bg-gray-50 disabled:opacity-50"
+            style={{ borderColor: 'rgba(15,110,86,0.25)', color: '#4B5563' }}>
+            Cancelar
+          </button>
+          <button onClick={onConfirm} disabled={removing}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] text-white font-medium transition-colors disabled:opacity-50"
+            style={{ background: '#DC2626' }}>
+            {removing ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            Quitar del organigrama
           </button>
         </div>
       </div>
@@ -1016,8 +1106,19 @@ export default function OrganizationModule({ user }) {
   const [showModalNodo, setShowModalNodo]       = useState(false)
   const [editingNodo, setEditingNodo]           = useState(null)
   const [showModalPermisos, setShowModalPermisos] = useState(false)
+  const [nodoToRemove, setNodoToRemove]         = useState(null)
+  const [removingNodo, setRemovingNodo]         = useState(false)
 
   const isSuperadmin = user?.role === 'Superadmin'
+
+  const [toast, setToast] = useState(null)
+  const toastTimer = useRef(null)
+  const showToast = useCallback((message) => {
+    setToast(message)
+    clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 2600)
+  }, [])
+  useEffect(() => () => clearTimeout(toastTimer.current), [])
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -1118,6 +1219,34 @@ export default function OrganizationModule({ user }) {
   const handleEditNodo = (node) => {
     setEditingNodo(node)
     setShowModalNodo(true)
+  }
+
+  const handleQuitarNodo = async () => {
+    if (!nodoToRemove) return
+    setRemovingNodo(true)
+    try {
+      const res = await api.eliminarNodoOrganigrama(nodoToRemove.id)
+      showToast(res?.message || 'Persona quitada del organigrama')
+      setNodoToRemove(null)
+      setSelectedNode(null)
+      await cargar()
+    } catch (err) {
+      if (err.status === 409) {
+        // Bloqueado por subordinados: no se toca el árbol ni el panel, solo
+        // se cierra la confirmación y se muestra el motivo devuelto por backend.
+        alert(err.message)
+        setNodoToRemove(null)
+      } else if (err.status === 404) {
+        alert(err.message || 'Nodo no encontrado')
+        setNodoToRemove(null)
+        setSelectedNode(null)
+        await cargar()
+      } else {
+        alert(err.message || 'No se pudo quitar la persona del organigrama')
+      }
+    } finally {
+      setRemovingNodo(false)
+    }
   }
 
   const TABS = [
@@ -1255,6 +1384,7 @@ export default function OrganizationModule({ user }) {
                       onClose={() => setSelectedNode(null)}
                       onEditPermisos={() => setShowModalPermisos(true)}
                       onEditNodo={handleEditNodo}
+                      onQuitarNodo={setNodoToRemove}
                     />
                   )}
                 </div>
@@ -1344,6 +1474,25 @@ export default function OrganizationModule({ user }) {
           onClose={() => setShowModalPermisos(false)}
           saving={saving}
         />
+      )}
+
+      {nodoToRemove && (
+        <ModalConfirmQuitarNodo
+          node={nodoToRemove}
+          removing={removingNodo}
+          onConfirm={handleQuitarNodo}
+          onClose={() => setNodoToRemove(null)}
+        />
+      )}
+
+      {toast && (
+        <div
+          className="fixed bottom-6 right-6 flex items-center gap-2 text-white text-[13px] font-medium px-4 py-3 rounded-xl shadow-lg z-[60]"
+          style={{ background: '#04342C' }}
+        >
+          <CheckCircle2 size={15} style={{ color: '#5DCAA5' }} />
+          {toast}
+        </div>
       )}
     </div>
   )
