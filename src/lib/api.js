@@ -238,6 +238,24 @@ export const api = {
   getRolesPredefinidos:  ()          => request('/api/organizacion/roles-predefinidos'),
   inactivarExpirados:    ()          => request('/api/organizacion/inactivar-expirados', { method: 'POST' }),
 
+  // ── Indicadores (KPI) ────────────────────────────
+  // El backend calcula valores, estados y tendencia; el frontend solo los muestra.
+  // PUT es reemplazo completo (se envía toda la definición). DELETE desactiva.
+  getIndicadores: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''))
+    ).toString()
+    return request(`/api/indicadores${qs ? `?${qs}` : ''}`)
+  },
+  getVariablesIndicadores: () => request('/api/indicadores/variables'),
+  validarFormulaIndicador: (formula) => request('/api/indicadores/validar-formula', { method: 'POST', body: JSON.stringify({ formula }) }),
+  getIndicador:        (id)       => request(`/api/indicadores/${id}`),
+  crearIndicador:      (body)     => request('/api/indicadores',      { method: 'POST',   body: JSON.stringify(body) }),
+  editarIndicador:     (id, body) => request(`/api/indicadores/${id}`, { method: 'PUT',    body: JSON.stringify(body) }),
+  eliminarIndicador:   (id)       => request(`/api/indicadores/${id}`, { method: 'DELETE' }),
+  getValorIndicador:   (id, periodo) => request(`/api/indicadores/${id}/valor${periodo ? `?periodo=${encodeURIComponent(periodo)}` : ''}`),
+  getHistoricoIndicador: (id, period) => request(`/api/indicadores/${id}/historico${period ? `?period=${encodeURIComponent(period)}` : ''}`),
+
   // ── Protocolos ───────────────────────────────────
   getProtocolos: (params = {}) => {
     const qs = new URLSearchParams(

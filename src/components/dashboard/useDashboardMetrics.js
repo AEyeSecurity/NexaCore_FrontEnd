@@ -28,7 +28,8 @@ export function useDashboardMetrics(visibleWidgets, mes, anio) {
   const periodRef = useRef({ mes, anio })
   periodRef.current = { mes, anio }
 
-  const seriesNeeded = [...new Set((visibleWidgets || []).filter(Boolean).map(seriesKeyFor))]
+  // Solo mosaicos con `group` (los de indicador piden su propio histórico).
+  const seriesNeeded = [...new Set((visibleWidgets || []).filter(w => w?.group).map(seriesKeyFor))]
   const seriesKey = seriesNeeded.slice().sort().join(',')
 
   const fetchSeries = useCallback((seriesId) => {

@@ -12,6 +12,7 @@ import CrmModule from './modules/crm/CrmModule'
 import ProtocolosModule from './modules/protocolos/ProtocolosModule'
 import Usuarios from './components/Usuarios'
 import OrganizationModule from './modules/organization/OrganizationModule'
+import IndicadoresModule from './modules/indicadores/IndicadoresModule'
 import AuthCallback from './components/AuthCallback'
 
 function ComingSoon({ title }) {
@@ -108,6 +109,7 @@ export default function App() {
   return (
     <Layout page={page} onNavigate={navigate} user={user} onLogout={handleLogout}>
       {page === 'dashboard'     && <DashboardHub onNavigate={navigate} user={user} />}
+      {page === 'indicadores'   && <IndicadoresModule />}
       {page === 'finance'       && <FinanceModule user={user} initialTab={financeInitialTab} />}
       {page === 'operations'    && <OperationsModule user={user} />}
       {page === 'crm'           && <CrmModule />}

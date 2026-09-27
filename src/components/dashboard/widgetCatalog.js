@@ -1,6 +1,6 @@
 import {
   TrendingUp, TrendingDown, Activity, Receipt,
-  Wallet, Users, Briefcase,
+  Wallet, Users, Briefcase, Gauge,
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { formatK, fmtARS } from './format'
@@ -31,7 +31,15 @@ export const PERIOD_LABELS = {
   '12m': 'Últimos 12 meses',
 }
 
-export const DASHBOARD_CHART_TYPES = ['kpi', 'area', 'bar', 'list']
+// 'line' y 'gauge' solo los admite el mosaico `indicador_kpi` (ver
+// INDICATOR_CHART_TYPES); el resto de los mosaicos sigue con su matriz.
+export const DASHBOARD_CHART_TYPES = ['kpi', 'area', 'bar', 'list', 'line', 'gauge']
+
+// Mosaico de Indicadores (KPI) — contrato del backend (dashboard/config/widgets.js):
+// module 'indicadores' + requiere 'finance', lleva `indicatorId`, períodos
+// month/3m/6m/12m y visualizaciones kpi/line/bar/area/gauge.
+export const INDICATOR_WIDGET_ID = 'indicador_kpi'
+export const INDICATOR_CHART_TYPES = ['kpi', 'line', 'bar', 'area', 'gauge']
 
 // Matriz de compatibilidad aprobada por backend (por ID base). Sólo la usa el
 // asistente para decidir qué visualizaciones habilitar y cuál es la
@@ -408,6 +416,20 @@ export const WIDGET_CATALOG = {
       { label: 'Completadas', valor: Number(data?.completadas ?? 0) },
     ],
   },
+  // Sin `group`: sus datos no salen de useDashboardMetrics sino de
+  // GET /api/indicadores/:indicatorId/historico?period=<period> (el Dashboard
+  // backend no calcula KPI). Lo renderiza IndicatorWidgetCard.
+  indicador_kpi: {
+    id: 'indicador_kpi',
+    title: 'Indicador',
+    module: 'indicadores',
+    requiresModules: ['finance'],
+    requiresIndicator: true,
+    type: 'indicator',
+    defaultChartType: 'kpi',
+    icon: Gauge,
+    colors: { bg: '#FFFFFF', accent: '#0F6E56', iconBg: '#E1F5EE' },
+  },
   operativo_metricas_tareas_6m: {
     id: 'operativo_metricas_tareas_6m',
     title: 'Tareas (últimos 6 meses)',
@@ -438,6 +460,7 @@ export function isWidgetSelectable(widgetId, allowedModules, userRole) {
   const widget = WIDGET_CATALOG[widgetId]
   if (!widget) return false
   if (!allowedModules?.includes(widget.module)) return false
+  if (widget.requiresModules && !widget.requiresModules.every(m => allowedModules.includes(m))) return false
   if (widget.requiresRole && !widget.requiresRole.includes(userRole)) return false
   return true
 }
@@ -454,6 +477,7 @@ export function isWidgetSelectable(widgetId, allowedModules, userRole) {
 // mosaico viejo se sigue viendo igual que siempre.
 export function catalogChartType(entry) {
   if (!entry) return 'kpi'
+  if (entry.defaultChartType) return entry.defaultChartType
   if (entry.type === 'trend') return entry.chartVariant === 'bar' ? 'bar' : 'area'
   if (entry.type === 'metric') return 'kpi'
   return 'list' // detail
@@ -475,6 +499,11 @@ export function normalizeWidget(raw, index) {
   const w = typeof raw === 'string' ? { id: raw } : (raw || {})
   const entry = WIDGET_CATALOG[w.id]
   if (!entry) return null
+  // Mosaico de indicador: sin indicatorId no es válido (el backend tampoco
+  // lo devuelve). Nunca se deduplica por indicatorId: la identidad sigue
+  // siendo instanceId.
+  const indicatorId = entry.requiresIndicator && typeof w.indicatorId === 'string' ? w.indicatorId.trim() : ''
+  if (entry.requiresIndicator && !indicatorId) return null
   const legacySixM = typeof w.id === 'string' && w.id.endsWith('_6m')
   const period =
     normalizePeriod(w.period) ||
@@ -493,6 +522,7 @@ export function normalizeWidget(raw, index) {
     size: w.size || DEFAULT_TILE_SIZE,
     period,
     chartType,
+    ...(entry.requiresIndicator ? { indicatorId } : {}),
   }
 }
 
@@ -511,19 +541,23 @@ export function resolveWidget(raw, index) {
     period: cfg.period,
     chartType: cfg.chartType,
     size: cfg.size,
+    ...(cfg.indicatorId ? { indicatorId: cfg.indicatorId } : {}),
     months: PERIOD_MONTHS[cfg.period] || entry.periodMonths || 1,
     title: (!isLegacy && periodLabel) ? `${entry.title} · ${periodLabel.toLowerCase()}` : entry.title,
   }
 }
 
 // Lo que se envía al backend por cada mosaico. Conserva instanceId. NO se
-// agrega `title` (el backend no lo persiste).
+// agrega `title` (el backend no lo persiste). `indicatorId` se envía SOLO en
+// mosaicos de indicador: el backend rechaza (400) indicatorId en cualquier otro.
 export function serializeWidget(w) {
-  return {
+  const out = {
     id: w.id,
     instanceId: w.instanceId ? String(w.instanceId) : `legacy:${w.id}`,
     size: w.size || DEFAULT_TILE_SIZE,
     period: normalizePeriod(w.period) || 'month',
     chartType: normalizeChartType(w.chartType) || 'kpi',
   }
+  if (WIDGET_CATALOG[w.id]?.requiresIndicator) out.indicatorId = w.indicatorId
+  return out
 }
