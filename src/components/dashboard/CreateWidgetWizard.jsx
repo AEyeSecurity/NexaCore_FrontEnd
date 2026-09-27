@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, AlertCircle, Check, Hash, AreaChart, BarChart3, List } from 'lucide-react'
-import { resolveWidget } from './widgetCatalog'
+import { X, AlertCircle, Check, Hash, AreaChart, BarChart3, List, LineChart, Gauge, Search, RefreshCw } from 'lucide-react'
+import { api } from '../../lib/api'
+import { resolveWidget, INDICATOR_WIDGET_ID, PERIOD_LABELS } from './widgetCatalog'
 import { DEFAULT_TILE_SIZE } from './widgetSizes'
 import {
   WIZARD_MODULES, WIZARD_PERIODS, CHART_TYPE_CARDS,
   familiesForModule, defaultChartTypeFor,
+  INDICATOR_WIZARD_MODULE, INDICATOR_CHART_TYPE_CARDS,
+  canAddIndicatorWidget, indicatorPeriodsFor,
 } from './wizardCatalog'
+import { PERSPECTIVA_LABELS, FRECUENCIA_LABELS, mensajeErrorHttp } from '../../modules/indicadores/constants'
 import WidgetCard from './WidgetCard'
 
 const STEPS = ['Módulo', 'Métrica', 'Período', 'Visualización']
 
-const VIZ_ICON = { kpi: Hash, area: AreaChart, bar: BarChart3, list: List }
+const VIZ_ICON = { kpi: Hash, area: AreaChart, bar: BarChart3, list: List, line: LineChart, gauge: Gauge }
 
 const BORDER = 'rgba(15,110,86,0.15)'
 const GREEN = '#0F6E56'
@@ -73,6 +77,10 @@ export default function CreateWidgetWizard({
   const [familyId, setFamilyId] = useState(null)
   const [periodId, setPeriodId] = useState(null)
   const [chartType, setChartType] = useState(null)
+  // Flujo "Indicador": indicador elegido + listado de activos del backend.
+  const [indicatorId, setIndicatorId] = useState(null)
+  const [indicadores, setIndicadores] = useState({ loading: false, error: null, data: null })
+  const [indicatorSearch, setIndicatorSearch] = useState('')
 
   useEffect(() => {
     if (open) {
@@ -81,8 +89,24 @@ export default function CreateWidgetWizard({
       setFamilyId(null)
       setPeriodId(null)
       setChartType(null)
+      setIndicatorId(null)
+      setIndicatorSearch('')
+      setIndicadores({ loading: false, error: null, data: null })
     }
   }, [open])
+
+  const isIndicator = moduleId === INDICATOR_WIZARD_MODULE.id
+
+  // Solo indicadores activos (default de GET /api/indicadores): uno
+  // desactivado nunca se ofrece para un mosaico nuevo. Se pide una vez por
+  // apertura del asistente.
+  useEffect(() => {
+    if (!open || !isIndicator || indicadores.data || indicadores.loading) return
+    setIndicadores({ loading: true, error: null, data: null })
+    api.getIndicadores()
+      .then(res => setIndicadores({ loading: false, error: null, data: Array.isArray(res?.data) ? res.data : [] }))
+      .catch(err => setIndicadores({ loading: false, error: err, data: null }))
+  }, [open, isIndicator, indicadores.data, indicadores.loading])
 
   useEffect(() => {
     if (!open) return
@@ -97,9 +121,22 @@ export default function CreateWidgetWizard({
   }, [open, onCancel])
 
   const modules = useMemo(
-    () => WIZARD_MODULES.filter(m => allowedModules?.includes(m.id)),
-    [allowedModules]
+    () => [
+      ...WIZARD_MODULES.filter(m => allowedModules?.includes(m.id)),
+      ...(canAddIndicatorWidget(allowedModules, userRole) ? [INDICATOR_WIZARD_MODULE] : []),
+    ],
+    [allowedModules, userRole]
   )
+  const indicator = useMemo(
+    () => (indicadores.data || []).find(i => i.id === indicatorId) || null,
+    [indicadores.data, indicatorId]
+  )
+  const indicatorPeriods = indicator ? indicatorPeriodsFor(indicator.frecuencia) : []
+  const filteredIndicadores = useMemo(() => {
+    const q = indicatorSearch.trim().toLowerCase()
+    const list = indicadores.data || []
+    return q ? list.filter(i => i.nombre.toLowerCase().includes(q)) : list
+  }, [indicadores.data, indicatorSearch])
   const families = useMemo(
     () => (moduleId ? familiesForModule(moduleId, allowedModules, userRole) : []),
     [moduleId, allowedModules, userRole]
@@ -112,6 +149,17 @@ export default function CreateWidgetWizard({
   // Mosaico de referencia para la vista previa (period/chartType provisorios
   // hasta que el usuario los elige).
   const previewWidget = useMemo(() => {
+    if (isIndicator) {
+      if (!indicatorId) return null
+      return resolveWidget({
+        id: INDICATOR_WIDGET_ID,
+        instanceId: 'preview',
+        indicatorId,
+        size: DEFAULT_TILE_SIZE,
+        period: periodId || '12m',
+        chartType: chartType || 'kpi',
+      })
+    }
     if (!family) return null
     return resolveWidget({
       id: family.baseId,
@@ -119,7 +167,7 @@ export default function CreateWidgetWizard({
       period: periodId || '6m',
       chartType: chartType || defaultChartTypeFor(family),
     })
-  }, [family, periodId, chartType])
+  }, [isIndicator, indicatorId, family, periodId, chartType])
 
   if (!open) return null
   const root = document.getElementById('app-main')
@@ -128,8 +176,17 @@ export default function CreateWidgetWizard({
   const selectModule = (id) => {
     setModuleId(id)
     setFamilyId(null)
+    setIndicatorId(null)
     setPeriodId(null)
     setChartType(null)
+  }
+
+  const selectIndicator = (ind) => {
+    setIndicatorId(ind.id)
+    // Si el período elegido no es compatible con la frecuencia del nuevo
+    // indicador, se descarta.
+    if (periodId && !indicatorPeriodsFor(ind.frecuencia).includes(periodId)) setPeriodId(null)
+    setChartType(prev => prev || 'kpi')
   }
 
   const selectFamily = (id) => {
@@ -140,16 +197,23 @@ export default function CreateWidgetWizard({
     setChartType(defaultChartTypeFor(nextFam))
   }
 
-  const selectPeriod = (id) => setPeriodId(id)   // no toca chartType
+  const selectPeriod = (id) => {                   // no toca chartType
+    if (isIndicator && !indicatorPeriods.includes(id)) return
+    setPeriodId(id)
+  }
+
+  const allowedChartTypes = isIndicator
+    ? INDICATOR_CHART_TYPE_CARDS.map(c => c.id)
+    : (family?.allowedChartTypes || [])
 
   const selectChartType = (id) => {
-    if (!family?.allowedChartTypes?.includes(id)) return
+    if (!allowedChartTypes.includes(id)) return
     setChartType(id)
   }
 
   const stepValid =
     step === 1 ? !!moduleId :
-    step === 2 ? !!familyId :
+    step === 2 ? (isIndicator ? !!indicatorId : !!familyId) :
     step === 3 ? !!periodId :
     !!chartType
 
@@ -161,6 +225,22 @@ export default function CreateWidgetWizard({
     // Cada "Agregar al panel" crea SIEMPRE una instancia nueva (instanceId
     // único generado en el click, no en render). No se deduplica por id:
     // pueden coexistir varias instancias del mismo mosaico.
+    if (isIndicator) {
+      // Tampoco se deduplica por indicatorId: el mismo indicador puede estar
+      // varias veces con distinto período/visualización.
+      onSave([
+        ...(savedWidgets || []),
+        {
+          id: INDICATOR_WIDGET_ID,
+          instanceId: crypto.randomUUID(),
+          size: DEFAULT_TILE_SIZE,
+          period: periodId,
+          chartType,
+          indicatorId,
+        },
+      ])
+      return
+    }
     onSave([
       ...(savedWidgets || []),
       {
@@ -174,7 +254,8 @@ export default function CreateWidgetWizard({
   }
   const handleBack = () => { if (step > 1) setStep(step - 1) }
 
-  const recommended = family ? defaultChartTypeFor(family) : null
+  const recommended = isIndicator ? 'kpi' : (family ? defaultChartTypeFor(family) : null)
+  const chartCards = isIndicator ? INDICATOR_CHART_TYPE_CARDS : CHART_TYPE_CARDS
 
   return createPortal(
     <div className="absolute inset-0 z-50 flex justify-end">
@@ -246,8 +327,73 @@ export default function CreateWidgetWizard({
             </div>
           )}
 
+          {/* ── Paso 2 (Indicador): elegir indicador activo ── */}
+          {step === 2 && isIndicator && (
+            <div className="fade-in">
+              <StepHeading
+                title="¿Qué indicador querés ver?"
+                desc="Solo se muestran los indicadores activos."
+              />
+              {indicadores.loading || (!indicadores.data && !indicadores.error) ? (
+                <p className="flex items-center gap-2 text-[13px] text-gray-400"><RefreshCw size={13} className="animate-spin" /> Cargando indicadores…</p>
+              ) : indicadores.error ? (
+                <p className="flex items-start gap-1.5 text-[13px] text-red-600"><AlertCircle size={14} className="flex-shrink-0 mt-0.5" /> {mensajeErrorHttp(indicadores.error, 'accion')}</p>
+              ) : indicadores.data.length === 0 ? (
+                <p className="text-[13px] text-gray-400">No hay indicadores creados. Crealos desde la sección Indicadores.</p>
+              ) : (
+                <>
+                  <div className="relative mb-2.5">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={indicatorSearch}
+                      onChange={e => setIndicatorSearch(e.target.value)}
+                      placeholder="Buscar indicador…"
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border text-[13px] outline-none bg-white focus:ring-2 focus:ring-teal-700/10"
+                      style={{ borderColor: 'rgba(15,110,86,0.25)' }}
+                    />
+                  </div>
+                  {filteredIndicadores.length === 0 ? (
+                    <p className="text-[13px] text-gray-400">Ningún indicador coincide con la búsqueda.</p>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {filteredIndicadores.map(ind => {
+                        const selected = indicatorId === ind.id
+                        return (
+                          <button
+                            key={ind.id}
+                            onClick={() => selectIndicator(ind)}
+                            className="text-left border rounded-xl px-3.5 py-3 flex items-center justify-between gap-3 transition-colors"
+                            style={{
+                              borderColor: selected ? '#04342C' : BORDER,
+                              background: selected ? '#F6FAF8' : '#fff',
+                              borderWidth: selected ? 1.5 : 1,
+                            }}
+                          >
+                            <span className="min-w-0">
+                              <span className="block text-[14px] font-semibold text-gray-800 truncate">{ind.nombre}</span>
+                              <span className="block text-[11.5px] text-gray-400 mt-0.5">
+                                {PERSPECTIVA_LABELS[ind.perspectiva] ?? ind.perspectiva} · {FRECUENCIA_LABELS[ind.frecuencia] ?? ind.frecuencia}
+                              </span>
+                            </span>
+                            <span
+                              className="w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0"
+                              style={selected ? { background: '#04342C', borderColor: '#04342C', color: '#fff' } : { borderColor: BORDER }}
+                            >
+                              {selected && <Check size={12} strokeWidth={3} />}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {/* ── Paso 2: Métrica ────────────────────────────── */}
-          {step === 2 && (
+          {step === 2 && !isIndicator && (
             <div className="fade-in">
               <StepHeading
                 title="¿Qué querés medir?"
@@ -302,16 +448,20 @@ export default function CreateWidgetWizard({
               <div className="flex flex-col gap-2">
                 {WIZARD_PERIODS.map(p => {
                   const selected = periodId === p.id
+                  // Indicador: solo ventanas compatibles con su frecuencia.
+                  const enabled = !isIndicator || indicatorPeriods.includes(p.id)
                   return (
                     <button
                       key={p.id}
                       onClick={() => selectPeriod(p.id)}
-                      className="text-left border rounded-xl px-3.5 py-3 text-[14px] font-semibold transition-colors"
+                      disabled={!enabled}
+                      className="text-left border rounded-xl px-3.5 py-3 text-[14px] font-semibold transition-colors disabled:cursor-not-allowed"
                       style={{
                         borderColor: selected ? '#04342C' : BORDER,
                         background: selected ? '#F6FAF8' : '#fff',
                         borderWidth: selected ? 1.5 : 1,
                         color: '#16211B',
+                        opacity: enabled ? 1 : 0.4,
                       }}
                     >
                       {p.label}
@@ -319,20 +469,25 @@ export default function CreateWidgetWizard({
                   )
                 })}
               </div>
+              {isIndicator && indicator && indicatorPeriods.length < WIZARD_PERIODS.length && (
+                <p className="text-[11.5px] text-gray-400 mt-2.5">
+                  El indicador tiene frecuencia {(FRECUENCIA_LABELS[indicator.frecuencia] || '').toLowerCase()}: solo se habilitan las ventanas que abarcan al menos un período completo.
+                </p>
+              )}
             </div>
           )}
 
           {/* ── Paso 4: Visualización ──────────────────────── */}
-          {step === 4 && family && (
+          {step === 4 && (family || (isIndicator && indicator)) && (
             <div className="fade-in">
               <StepHeading
                 title="¿Cómo lo querés visualizar?"
                 desc="Marcamos con una etiqueta el formato recomendado, pero podés elegir cualquiera de los habilitados."
               />
               <div className="grid grid-cols-2 gap-2.5">
-                {CHART_TYPE_CARDS.map(v => {
+                {chartCards.map(v => {
                   const Icon = VIZ_ICON[v.id]
-                  const enabled = family.allowedChartTypes.includes(v.id)
+                  const enabled = allowedChartTypes.includes(v.id)
                   const selected = chartType === v.id
                   const isRecommended = recommended === v.id
                   return (
@@ -363,19 +518,23 @@ export default function CreateWidgetWizard({
                 })}
               </div>
               <p className="text-[11.5px] text-gray-400 mt-2.5">
-                {CHART_TYPE_CARDS.find(v => v.id === chartType)?.hint}
+                {chartCards.find(v => v.id === chartType)?.hint}
               </p>
 
               <label className="text-[12.5px] font-semibold text-gray-500 mt-5 mb-2 block">Título del mosaico</label>
               <input
                 type="text"
-                value={previewWidget?.title || ''}
+                value={isIndicator
+                  ? `${indicator?.nombre || ''} · ${(PERIOD_LABELS[periodId] || '').toLowerCase()}`
+                  : (previewWidget?.title || '')}
                 readOnly
                 className="w-full border rounded-xl px-3 py-2.5 text-[14px] text-gray-700 bg-gray-50"
                 style={{ borderColor: BORDER }}
               />
               <p className="text-[11.5px] text-gray-400 mt-1.5">
-                El título lo define el mosaico según la métrica y el período.
+                {isIndicator
+                  ? 'El título lo define el mosaico según el indicador y el período.'
+                  : 'El título lo define el mosaico según la métrica y el período.'}
               </p>
             </div>
           )}
@@ -385,11 +544,13 @@ export default function CreateWidgetWizard({
             <p className="text-[11.5px] font-bold text-gray-400 uppercase tracking-wider mb-2.5">Vista previa</p>
             {previewWidget ? (
               <>
-                <div className="h-[190px]">
+                <div className={isIndicator ? "h-[240px]" : "h-[190px]"}>
                   <WidgetCard widget={previewWidget} groupState={{ loading: true, error: null, data: null }} />
                 </div>
                 <p className="text-[11px] text-gray-400 mt-2">
-                  Estructura del mosaico. Los valores reales se calculan al agregarlo al panel.
+                  {isIndicator
+                    ? 'Valores reales del indicador para el período elegido.'
+                    : 'Estructura del mosaico. Los valores reales se calculan al agregarlo al panel.'}
                 </p>
               </>
             ) : (
@@ -397,7 +558,9 @@ export default function CreateWidgetWizard({
                 className="border border-dashed rounded-2xl min-h-[120px] flex items-center justify-center text-[13px] text-gray-400 text-center px-6"
                 style={{ borderColor: BORDER }}
               >
-                Elegí un módulo y una métrica para ver la vista previa
+                {isIndicator
+                  ? 'Elegí un indicador para ver la vista previa'
+                  : 'Elegí un módulo y una métrica para ver la vista previa'}
               </div>
             )}
           </div>

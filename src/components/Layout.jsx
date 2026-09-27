@@ -1,16 +1,20 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, TrendingUp, Briefcase, Users,
   BarChart2, Settings, Menu, X, ChevronLeft, ChevronRight,
-  Zap, UserCog, LogOut, Home, Building2, ClipboardCheck,
+  Zap, UserCog, LogOut, Home, Building2, ClipboardCheck, Gauge,
 } from 'lucide-react'
 import { ROLE_PAGES } from '../lib/permissions'
+import { api } from '../lib/api'
 import { NexiProvider, useNexi } from '../context/NexiContext'
 import NexiWidget from './nexi/NexiWidget'
 
 const NAV = [
   { section: 'PRINCIPAL', items: [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    // `module`: visible solo si la Matriz de permisos real habilita ese módulo
+    // (allowedModules del backend), no por rol.
+    { id: 'indicadores', label: 'Indicadores', icon: Gauge, module: 'indicadores' },
   ]},
   { section: 'MÓDULOS', items: [
     { id: 'finance',       label: 'Finanzas',      icon: TrendingUp },
@@ -43,9 +47,25 @@ export default function Layout({ children, page, onNavigate, user, onLogout }) {
   const userInitials = getInitials(userName)
   const allowedPages = ROLE_PAGES[userRole] ?? null
 
+  // Módulos habilitados según la Matriz de permisos (usuario > rol). La única
+  // fuente accesible para cualquier usuario es GET /api/dashboard/config.
+  // Mientras carga (o si falla) los ítems con `module` quedan ocultos.
+  const [allowedModules, setAllowedModules] = useState([])
+  useEffect(() => {
+    let alive = true
+    api.getDashboardConfig()
+      .then(res => { if (alive) setAllowedModules(res?.allowedModules || []) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [user?.email])
+
+  const isItemVisible = (item) => item.module
+    ? allowedModules.includes(item.module)
+    : (!allowedPages || allowedPages.includes(item.id))
+
   const filteredNAV = NAV.map(section => ({
     ...section,
-    items: section.items.filter(item => !allowedPages || allowedPages.includes(item.id)),
+    items: section.items.filter(isItemVisible),
   })).filter(section => section.items.length > 0)
 
   const renderSidebar = (isCollapsed, showCollapseControls = true) => (

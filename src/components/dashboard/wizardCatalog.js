@@ -1,8 +1,10 @@
-import { TrendingUp, Users, Briefcase } from 'lucide-react'
+import { TrendingUp, Users, Briefcase, Gauge } from 'lucide-react'
 import {
   WIDGET_CATALOG, MODULE_META, isWidgetSelectable,
   WIDGET_CHART_MATRIX, DASHBOARD_PERIODS, PERIOD_LABELS,
+  INDICATOR_WIDGET_ID, INDICATOR_CHART_TYPES,
 } from './widgetCatalog'
+import { periodosCompatibles } from '../../modules/indicadores/constants'
 
 // Capa de presentación del asistente "Crear gráfico personalizado".
 //
@@ -68,3 +70,33 @@ export const CHART_TYPE_CARDS = [
   { id: 'bar',  label: 'Barras',       hint: 'Un valor por mes o por categoría.' },
   { id: 'list', label: 'Lista',        hint: 'Filas de etiqueta y valor.' },
 ]
+
+// ── Flujo "Indicador" (mosaico indicador_kpi) ───────────────────────────
+// Opción adicional del paso 1. Se ofrece solo si el usuario tiene los módulos
+// que exige el backend ('indicadores' + 'finance').
+export const INDICATOR_WIZARD_MODULE = {
+  id: 'indicadores',
+  label: 'Indicador',
+  color: '#3B6FD6',
+  icon: Gauge,
+}
+
+export function canAddIndicatorWidget(allowedModules, userRole) {
+  return isWidgetSelectable(INDICATOR_WIDGET_ID, allowedModules, userRole)
+}
+
+// Períodos del Dashboard compatibles con la frecuencia del indicador (el
+// backend sigue siendo la validación final).
+export function indicatorPeriodsFor(frecuencia) {
+  return periodosCompatibles(frecuencia)
+}
+
+const INDICATOR_CHART_LABELS = {
+  kpi:   { label: 'Número',  hint: 'El último valor calculado del indicador.' },
+  line:  { label: 'Línea',   hint: 'Evolución del indicador en cada período de la ventana.' },
+  bar:   { label: 'Barra',   hint: 'Un valor por período, coloreado según su estado.' },
+  area:  { label: 'Área',    hint: 'Evolución del indicador con el área resaltada.' },
+  gauge: { label: 'Medidor', hint: 'El último valor frente al objetivo y al límite aceptable.' },
+}
+
+export const INDICATOR_CHART_TYPE_CARDS = INDICATOR_CHART_TYPES.map(id => ({ id, ...INDICATOR_CHART_LABELS[id] }))

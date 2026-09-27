@@ -1,6 +1,7 @@
 import { AlertCircle, RefreshCw } from 'lucide-react'
 import Sparkline from './Sparkline'
 import TrendCard from './TrendCard'
+import IndicatorWidgetCard from './IndicatorWidgetCard'
 
 function ErrorState({ message, onRetry }) {
   return (
@@ -138,6 +139,8 @@ function WidgetBody({ widget, data, loading }) {
 }
 
 export default function WidgetCard({ widget, groupState, onRetry }) {
+  // Los mosaicos de indicador piden su propio histórico (no usan groupState).
+  if (widget.requiresIndicator) return <IndicatorWidgetCard widget={widget} />
   const { loading, error, data } = groupState || { loading: true, error: null, data: null }
 
   return (
