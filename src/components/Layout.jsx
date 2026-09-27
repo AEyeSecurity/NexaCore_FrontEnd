@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   LayoutDashboard, TrendingUp, Briefcase, Users,
   BarChart2, Settings, Menu, X, ChevronLeft, ChevronRight,
   Zap, UserCog, LogOut, Home, Building2, ClipboardCheck, Gauge,
 } from 'lucide-react'
-import { ROLE_PAGES } from '../lib/permissions'
-import { api } from '../lib/api'
+import { ROLE_PAGES, useAllowedModules } from '../lib/permissions'
 import { NexiProvider, useNexi } from '../context/NexiContext'
 import NexiWidget from './nexi/NexiWidget'
 
@@ -47,17 +46,8 @@ export default function Layout({ children, page, onNavigate, user, onLogout }) {
   const userInitials = getInitials(userName)
   const allowedPages = ROLE_PAGES[userRole] ?? null
 
-  // Módulos habilitados según la Matriz de permisos (usuario > rol). La única
-  // fuente accesible para cualquier usuario es GET /api/dashboard/config.
-  // Mientras carga (o si falla) los ítems con `module` quedan ocultos.
-  const [allowedModules, setAllowedModules] = useState([])
-  useEffect(() => {
-    let alive = true
-    api.getDashboardConfig()
-      .then(res => { if (alive) setAllowedModules(res?.allowedModules || []) })
-      .catch(() => {})
-    return () => { alive = false }
-  }, [user?.email])
+  // Ítems con `module`: visibles según la Matriz de permisos real.
+  const allowedModules = useAllowedModules(user?.email)
 
   const isItemVisible = (item) => item.module
     ? allowedModules.includes(item.module)
@@ -231,7 +221,7 @@ export default function Layout({ children, page, onNavigate, user, onLogout }) {
   )
 
   return (
-    <NexiProvider user={user} currentPage={page}>
+    <NexiProvider user={user} allowedModules={allowedModules}>
       <LayoutShell
         collapsed={collapsed}
         mobileOpen={mobileOpen}

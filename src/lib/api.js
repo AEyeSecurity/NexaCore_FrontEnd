@@ -272,4 +272,26 @@ export const api = {
   registrarPruebaProtocolo: (id, body) => request(`/api/protocolos/${id}/pruebas`, { method: 'POST', body: JSON.stringify(body) }),
   getPruebasProtocolo:      (id)       => request(`/api/protocolos/${id}/pruebas`),
   getPrueba: (pruebaId) => request(`/api/protocolos/pruebas/${pruebaId}`),
+
+  // ── Nexi (asistente, solo lectura) ───────────────
+  // POST   /api/nexi/chat                        ← { conversationId?, mensaje, contextoModulo? }
+  //                                               → { conversationId, titulo, mensaje: { id, rol, contenido, created_at }, herramientasUsadas }
+  // GET    /api/nexi/conversaciones              → { data: [{ id, titulo, created_at, updated_at }], total }
+  // POST   /api/nexi/conversaciones              ← { titulo? } → { id, titulo, created_at, updated_at }
+  // GET    /api/nexi/conversaciones/:id/mensajes → { conversacion, data: [{ id, rol, contenido, created_at }] }
+  // DELETE /api/nexi/conversaciones/:id          → { message }
+  // Sin contextoModulo = modo General. Usuario, rol, permisos e historial los
+  // resuelve el backend desde la sesión: no se envían desde acá.
+  sendNexiMessage: ({ conversationId, mensaje, contextoModulo }) => request('/api/nexi/chat', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...(conversationId ? { conversationId } : {}),
+      mensaje,
+      ...(contextoModulo ? { contextoModulo } : {}),
+    }),
+  }),
+  getNexiConversations:   ()       => request('/api/nexi/conversaciones'),
+  createNexiConversation: (titulo) => request('/api/nexi/conversaciones', { method: 'POST', body: JSON.stringify(titulo ? { titulo } : {}) }),
+  getNexiMessages:        (id)     => request(`/api/nexi/conversaciones/${id}/mensajes`),
+  deleteNexiConversation: (id)     => request(`/api/nexi/conversaciones/${id}`, { method: 'DELETE' }),
 }
