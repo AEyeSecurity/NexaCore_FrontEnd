@@ -1,66 +1,191 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
-import { getAllowedNexiModules } from '../lib/nexiModules'
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react'
+import { api } from '../lib/api'
+import { getNexiModules } from '../lib/nexiModules'
 
 const NexiContext = createContext(null)
 
-function pickInitialModule(currentPage, allowedModules) {
-  if (allowedModules.some(m => m.id === currentPage)) return currentPage
-  return allowedModules[0]?.id ?? null
+// Traduce errores HTTP a mensajes para el usuario. Nunca muestra detalles
+// técnicos: solo los 400 de Nexi (validaciones marcadas como públicas por el
+// backend, ej. largo máximo) pasan su texto.
+function nexiErrorMessage(err, { withModule = false } = {}) {
+  if (err instanceof TypeError || err?.message === 'Failed to fetch') {
+    return 'No se pudo conectar con el servidor. Intentá nuevamente.'
+  }
+  switch (err?.status) {
+    case 400: return err.message || 'No se pudo enviar la consulta.'
+    case 401: return 'Tu sesión expiró. Volvé a iniciar sesión para seguir usando Nexi.'
+    case 403: return withModule
+      ? 'No tenés acceso a este módulo.'
+      : 'No tenés acceso a la información necesaria para realizar esta consulta.'
+    case 404: return 'Esta conversación ya no está disponible.'
+    case 429: return 'Estás enviando mensajes muy rápido. Esperá unos segundos e intentá nuevamente.'
+    default:  return 'Nexi no pudo responder en este momento. Intentá nuevamente.'
+  }
 }
 
-// TODO: conectar con el endpoint de Nexi cuando el backend esté disponible.
-// Handler desacoplado a propósito: hoy solo registra el mensaje del usuario
-// en el historial del módulo, sin generar ninguna respuesta simulada.
-function requestNexiResponse({ module, message, user }) {
-  // no-op intencional
-}
-
-export function NexiProvider({ children, user, currentPage }) {
-  const allowedModules = useMemo(() => getAllowedNexiModules(user?.role), [user?.role])
+// `allowedModules` viene de la Matriz de permisos real (useAllowedModules en
+// Layout); Nexi no calcula permisos propios.
+export function NexiProvider({ children, user, allowedModules }) {
+  const nexiModules = useMemo(() => getNexiModules(allowedModules), [allowedModules])
 
   const [isOpen, setIsOpen] = useState(false)
-  const [selectedModule, setSelectedModule] = useState(
-    () => pickInitialModule(currentPage, allowedModules)
-  )
-  const [conversations, setConversations] = useState({})
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
+
+  const [conversations, setConversations] = useState([])
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false)
+
+  const [currentConversationId, setCurrentConversationId] = useState(null)
+  const [messages, setMessages] = useState([])
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false)
+
+  // Contexto para la PRÓXIMA consulta. null = General.
+  const [selectedModule, setSelectedModule] = useState(null)
+  const [isSending, setIsSending] = useState(false)
+  const [error, setError] = useState(null)
+
+  // Se incrementa cada vez que cambia la conversación en pantalla: descarta
+  // respuestas que llegan tarde para una conversación que ya no se muestra.
+  const viewRef = useRef(0)
+  const sendingRef = useRef(false)
+
+  const loadConversations = useCallback(async () => {
+    setIsLoadingConversations(true)
+    try {
+      const res = await api.getNexiConversations()
+      setConversations(res?.data ?? [])
+    } catch {
+      // El listado es secundario: si falla, el chat sigue funcionando.
+    } finally {
+      setIsLoadingConversations(false)
+    }
+  }, [])
+
+  const resetConversation = useCallback(() => {
+    viewRef.current++
+    setCurrentConversationId(null)
+    setMessages([])
+    setSelectedModule(null)
+    setIsLoadingMessages(false)
+    setError(null)
+  }, [])
 
   const open = useCallback(() => {
     setIsOpen(true)
-    setSelectedModule(prev => {
-      if (allowedModules.some(m => m.id === currentPage)) return currentPage
-      if (prev && allowedModules.some(m => m.id === prev)) return prev
-      return allowedModules[0]?.id ?? null
-    })
-  }, [allowedModules, currentPage])
+    loadConversations()
+  }, [loadConversations])
 
-  const close = useCallback(() => setIsOpen(false), [])
+  const close = useCallback(() => {
+    setIsOpen(false)
+    setIsHistoryOpen(false)
+  }, [])
+
   const toggle = useCallback(() => (isOpen ? close() : open()), [isOpen, open, close])
 
+  const openHistory  = useCallback(() => { setIsHistoryOpen(true); loadConversations() }, [loadConversations])
+  const closeHistory = useCallback(() => setIsHistoryOpen(false), [])
+
+  // Click en el chip activo → vuelve a General. Solo se aceptan módulos
+  // habilitados por la Matriz; la selección no otorga permisos.
   const selectModule = useCallback((moduleId) => {
-    if (!allowedModules.some(m => m.id === moduleId)) return
-    setSelectedModule(moduleId)
-  }, [allowedModules])
+    if (!nexiModules.some(m => m.id === moduleId)) return
+    setSelectedModule(prev => (prev === moduleId ? null : moduleId))
+  }, [nexiModules])
 
-  const sendMessage = useCallback((text) => {
-    const trimmed = text.trim()
-    if (!trimmed || !selectedModule) return
+  const newConversation = useCallback(() => {
+    resetConversation()
+    setIsHistoryOpen(false)
+  }, [resetConversation])
 
-    const userMessage = { id: crypto.randomUUID(), role: 'user', text: trimmed, ts: Date.now() }
-    setConversations(prev => ({
-      ...prev,
-      [selectedModule]: [...(prev[selectedModule] ?? []), userMessage],
-    }))
+  const selectConversation = useCallback(async (id) => {
+    const view = ++viewRef.current
+    setIsHistoryOpen(false)
+    setCurrentConversationId(id)
+    setMessages([])
+    setSelectedModule(null)
+    setError(null)
+    setIsLoadingMessages(true)
+    try {
+      const res = await api.getNexiMessages(id)
+      if (viewRef.current !== view) return
+      setMessages(res?.data ?? [])
+    } catch (err) {
+      if (viewRef.current !== view) return
+      if (err.status === 404) {
+        setConversations(prev => prev.filter(c => c.id !== id))
+        resetConversation()
+      }
+      setError(nexiErrorMessage(err))
+    } finally {
+      if (viewRef.current === view) setIsLoadingMessages(false)
+    }
+  }, [resetConversation])
 
-    requestNexiResponse({ module: selectedModule, message: trimmed, user })
-  }, [selectedModule, user])
+  // Lanza el error para que la UI de confirmación pueda informarlo.
+  const deleteConversation = useCallback(async (id) => {
+    try {
+      await api.deleteNexiConversation(id)
+    } catch (err) {
+      if (err.status !== 404) throw new Error(nexiErrorMessage(err))
+    }
+    setConversations(prev => prev.filter(c => c.id !== id))
+    if (id === currentConversationId) resetConversation()
+  }, [currentConversationId, resetConversation])
 
-  const messages = conversations[selectedModule] ?? []
+  const sendMessage = useCallback(async (text) => {
+    const mensaje = text.trim()
+    if (!mensaje || sendingRef.current) return
+
+    const view = viewRef.current
+    const contextoModulo = selectedModule
+    const tempId = `tmp-${crypto.randomUUID()}`
+
+    sendingRef.current = true
+    setIsSending(true)
+    setError(null)
+    setMessages(prev => [...prev, { id: tempId, rol: 'usuario', contenido: mensaje, created_at: new Date().toISOString() }])
+
+    try {
+      const res = await api.sendNexiMessage({ conversationId: currentConversationId, mensaje, contextoModulo })
+
+      setConversations(prev => [
+        { id: res.conversationId, titulo: res.titulo, updated_at: new Date().toISOString() },
+        ...prev.filter(c => c.id !== res.conversationId),
+      ])
+      if (viewRef.current !== view) return
+
+      setCurrentConversationId(res.conversationId)
+      if (res.mensaje) {
+        setMessages(prev => [...prev, { ...res.mensaje, herramientasUsadas: res.herramientasUsadas ?? [] }])
+      }
+    } catch (err) {
+      if (viewRef.current !== view) return
+      setMessages(prev => prev.map(m => (m.id === tempId ? { ...m, fallido: true } : m)))
+
+      if (err.status === 404 && currentConversationId) {
+        setConversations(prev => prev.filter(c => c.id !== currentConversationId))
+        resetConversation()
+      } else if (err.status === 403 && contextoModulo) {
+        setSelectedModule(null)
+      }
+      setError(nexiErrorMessage(err, { withModule: Boolean(contextoModulo) }))
+    } finally {
+      sendingRef.current = false
+      setIsSending(false)
+    }
+  }, [currentConversationId, selectedModule, resetConversation])
+
+  const dismissError = useCallback(() => setError(null), [])
 
   const value = {
     isOpen, open, close, toggle,
-    allowedModules,
+    isHistoryOpen, openHistory, closeHistory,
+    nexiModules,
     selectedModule, selectModule,
-    messages, sendMessage,
+    conversations, isLoadingConversations,
+    currentConversationId, newConversation, selectConversation, deleteConversation,
+    messages, isLoadingMessages,
+    sendMessage, isSending,
+    error, dismissError,
     user,
   }
 

@@ -1,9 +1,10 @@
 import {
   TrendingUp, Briefcase, Users,
   BarChart2, Settings, UserCog, Building2,
-  LayoutGrid, LogOut, Layers, ClipboardCheck,
+  LayoutGrid, LogOut, Layers, ClipboardCheck, Gauge,
 } from 'lucide-react'
 import logoUrl from '../../resources/logo3.png'
+import { useAllowedModules } from '../lib/permissions'
 
 const MODULES = [
   { id: 'finance',       label: 'Finanzas',      icon: TrendingUp },
@@ -45,9 +46,16 @@ export default function Home({ user, onNavigate, onLogout }) {
   const visibleModules  = MODULES.filter(m => !allowedPages || allowedPages.includes(m.id))
   const visibleSystem   = SYSTEM_ITEMS.filter(m => !allowedPages || allowedPages.includes(m.id))
 
-  // Orden: Dashboard primero, luego el resto de módulos visibles
+  // Indicadores: mismo criterio que el menú lateral — Matriz de permisos real
+  // (allowedModules), no por rol.
+  const allowedModules = useAllowedModules(user?.email)
+  const indicadoresEntry = allowedModules.includes('indicadores')
+    ? [{ id: 'indicadores', label: 'Indicadores', icon: Gauge }]
+    : []
+
+  // Orden: Dashboard, Indicadores, luego el resto de módulos visibles
   const dashboardEntry = canSeeDashboard ? [{ id: 'dashboard', label: 'Dashboard', icon: LayoutGrid }] : []
-  const allModules = [...dashboardEntry, ...visibleModules]
+  const allModules = [...dashboardEntry, ...indicadoresEntry, ...visibleModules]
   const row1Modules = allModules.slice(0, 3)
   const row2Modules = allModules.slice(3)
 
