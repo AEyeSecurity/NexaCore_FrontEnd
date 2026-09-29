@@ -9,10 +9,10 @@ export const ROLE_PAGES = {
   'Director':   null,
   'Operativo':  ['dashboard', 'operations'],
   'Contable':   ['dashboard', 'finance', 'reportes'],
-  'Comercial':  ['dashboard', 'crm'],
-  'Mando Medio': ['dashboard', 'operations', 'crm'],
+  'Comercial':  ['dashboard'],
+  'Mando Medio': ['dashboard', 'operations'],
   'Operario':    ['dashboard', 'operations'],
-  'Auditor / Lector': ['dashboard', 'finance', 'operations', 'crm', 'reportes'],
+  'Auditor / Lector': ['dashboard', 'finance', 'operations', 'reportes'],
   'Externo':     ['dashboard'],
 }
 
