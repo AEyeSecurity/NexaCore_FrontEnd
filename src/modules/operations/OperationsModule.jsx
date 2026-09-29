@@ -1,22 +1,20 @@
 import {
   Briefcase, Plus, CheckCircle, Clock, AlertCircle, XCircle,
   Search, RefreshCw, Trash2, X, User, Calendar, Edit2, AlertTriangle,
-  Send, ThumbsUp, ThumbsDown, Inbox, History,
+  Send, ThumbsUp, ThumbsDown, Inbox, History, Settings2,
 } from 'lucide-react'
 import { useEffect, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../../lib/api'
+import EtapasConfigModal from './EtapasConfigModal'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const COLUMNS = [
-  { id: 'Pendiente',  label: 'Pendiente',  color: '#EF9F27', bg: '#FFFBEB', icon: AlertCircle },
-  { id: 'En Proceso', label: 'En Proceso', color: '#0EA5E9', bg: '#F0F9FF', icon: Clock       },
-  { id: 'Completada', label: 'Completada', color: '#1D9E75', bg: '#ECFDF5', icon: CheckCircle  },
-  { id: 'Cancelada',  label: 'Cancelada',  color: '#9CA3AF', bg: '#F9FAFB', icon: XCircle      },
-]
+// Las etapas del tablero (columnas) son 100% personalizables y vienen de
+// GET /api/operations/etapas — ya no hay 4 columnas fijas. `tipo_base` es el
+// único enum que sigue siendo fijo (lo define el schema del backend).
+const TIPOS_CERRADOS = ['completada', 'cancelada']
 
 const PRIORIDADES  = ['Alta', 'Media', 'Baja']
-const ESTADOS      = ['Pendiente', 'En Proceso', 'Completada', 'Cancelada']
 const ROLES_ADMIN  = ['Superadmin', 'Dirección']
 
 const PRIORIDAD_CFG = {
@@ -121,12 +119,16 @@ function ModalHistorial({ tarea, onClose }) {
 
   // Etiquetas legibles para cada campo de la tabla tareas que se audita
   const CAMPO_LABELS = {
-    titulo:       'título',
-    descripcion:  'descripción',
-    estado:       'estado',
-    prioridad:    'prioridad',
-    asignado_a:   'responsable',
-    fecha_limite: 'fecha límite',
+    titulo:                'título',
+    descripcion:           'descripción',
+    estado:                'estado',
+    etapa_id:              'etapa',
+    prioridad:             'prioridad',
+    asignado_a:            'responsable',
+    fecha_inicio_planeada: 'inicio planeado',
+    fecha_limite:          'fecha límite',
+    fecha_inicio_real:     'inicio real',
+    fecha_fin_real:        'fin real',
   }
 
   // Formatea fecha ISO "YYYY-MM-DD" a "DD/MM/AAAA" para mostrar en el historial
@@ -148,16 +150,16 @@ function ModalHistorial({ tarea, onClose }) {
     })
   }
 
+  // Campos de fecha (YYYY-MM-DD) que se muestran formateados, no en crudo
+  const CAMPOS_FECHA = ['fecha_limite', 'fecha_inicio_planeada', 'fecha_inicio_real', 'fecha_fin_real']
+
   // Construye la descripción textual de cada registro según su acción y campo
   function renderDescripcion(h) {
     if (h.accion === 'actualizacion') {
-      const campo    = CAMPO_LABELS[h.campo_modificado] || h.campo_modificado
-      const anterior = h.campo_modificado === 'fecha_limite'
-        ? fmtFechaCorta(h.valor_anterior)
-        : (h.valor_anterior || '(vacío)')
-      const nuevo = h.campo_modificado === 'fecha_limite'
-        ? fmtFechaCorta(h.valor_nuevo)
-        : (h.valor_nuevo || '(vacío)')
+      const campo   = CAMPO_LABELS[h.campo_modificado] || h.campo_modificado
+      const esFecha = CAMPOS_FECHA.includes(h.campo_modificado)
+      const anterior = esFecha ? fmtFechaCorta(h.valor_anterior) : (h.valor_anterior || '(vacío)')
+      const nuevo    = esFecha ? fmtFechaCorta(h.valor_nuevo)    : (h.valor_nuevo || '(vacío)')
       return <>cambió {campo} de <span className="font-medium text-gray-800">"{anterior}"</span> a <span className="font-medium text-gray-800">"{nuevo}"</span></>
     }
     return ACCION_LABELS[h.accion] || h.accion
@@ -248,28 +250,30 @@ function ModalHistorial({ tarea, onClose }) {
 }
 
 // ── TareaCard ─────────────────────────────────────────────────────────────────
-function TareaCard({ tarea, onEditar, onEliminar, onCambiarEstado, onHistorial }) {
+function TareaCard({ tarea, etapas, onEditar, onEliminar, onCambiarEtapa, onHistorial, onDragStart, onDragEnd, isDragging }) {
   const [cambiando, setCambiando] = useState(false)
   const prioCfg = PRIORIDAD_CFG[tarea.prioridad] || { background: '#F3F4F6', color: '#4B5563' }
-  const vencida =
-    tarea.estado !== 'Completada' &&
-    tarea.estado !== 'Cancelada'  &&
-    isVencida(tarea.fecha_limite)
+  const etapa = tarea.operativo_etapas
+  const vencida = !TIPOS_CERRADOS.includes(etapa?.tipo_base) && isVencida(tarea.fecha_limite)
 
-  const handleEstado = async (e) => {
-    const nuevo = e.target.value
-    if (nuevo === tarea.estado) return
+  const handleEtapa = async (e) => {
+    const nuevaEtapaId = e.target.value
+    if (nuevaEtapaId === String(etapa?.id)) return
     setCambiando(true)
-    try { await onCambiarEstado(tarea.id, nuevo) }
+    try { await onCambiarEtapa(tarea.id, nuevaEtapaId) }
     finally { setCambiando(false) }
   }
 
   return (
     <div
-      className="rounded-xl border shadow-sm p-4 space-y-3 hover:shadow-md transition-shadow"
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className="rounded-xl border shadow-sm p-4 space-y-3 hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing"
       style={{
         background:  vencida ? '#FFF5F5' : '#ffffff',
         borderColor: vencida ? 'rgba(220,38,38,0.35)' : 'rgba(15,110,86,0.12)',
+        opacity: isDragging ? 0.4 : 1,
       }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -322,36 +326,57 @@ function TareaCard({ tarea, onEditar, onEliminar, onCambiarEstado, onHistorial }
             {vencida && <span className="font-medium">· {diasVencida(tarea.fecha_limite)}</span>}
           </div>
         )}
+        {tarea.fecha_inicio_planeada && (
+          <div className="flex items-center gap-1.5 text-[11.5px] text-gray-500">
+            <Calendar size={11} className="shrink-0" />
+            <span>Inicio planeado: {fmtFecha(tarea.fecha_inicio_planeada)}</span>
+          </div>
+        )}
+        {tarea.fecha_inicio_real && (
+          <div className="flex items-center gap-1.5 text-[11.5px] text-gray-500">
+            <Calendar size={11} className="shrink-0" />
+            <span>
+              Iniciada: {fmtFecha(tarea.fecha_inicio_real)}
+              {tarea.fecha_fin_real ? (
+                <> · Finalizada: {fmtFecha(tarea.fecha_fin_real)}
+                  {tarea.dias_trabajo != null && ` · ${tarea.dias_trabajo} ${tarea.dias_trabajo === 1 ? 'día' : 'días'} de trabajo`}
+                </>
+              ) : ' · en curso'}
+            </span>
+          </div>
+        )}
       </div>
 
       <select
-        value={tarea.estado}
-        onChange={handleEstado}
+        value={etapa?.id ?? ''}
+        onChange={handleEtapa}
         disabled={cambiando}
         className="w-full border rounded-lg px-2 py-1.5 text-[12px] text-gray-600 outline-none bg-gray-50 disabled:opacity-60 transition-colors"
         style={{ borderColor: 'rgba(15,110,86,0.2)' }}
       >
-        {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
+        {etapas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
       </select>
     </div>
   )
 }
 
 // ── ModalTarea ────────────────────────────────────────────────────────────────
-function ModalTarea({ tarea, onClose, onSaved, user }) {
+function ModalTarea({ tarea, etapas, onClose, onSaved, user }) {
   const adminUser = esAdmin(user)
 
   const [modo, setModo] = useState(() => {
     if (tarea) return tarea.tipo || 'asignacion'
     return 'asignacion'
   })
+  const etapaInicial = etapas.find(e => e.tipo_base === 'pendiente') || etapas[0]
   const [form, setForm] = useState({
-    titulo:       tarea?.titulo       || '',
-    descripcion:  tarea?.descripcion  || '',
-    estado:       tarea?.estado       || 'Pendiente',
-    prioridad:    tarea?.prioridad    || 'Media',
-    asignado_a:   tarea?.asignado_a   || '',
-    fecha_limite: tarea?.fecha_limite || '',
+    titulo:                 tarea?.titulo                 || '',
+    descripcion:            tarea?.descripcion             || '',
+    etapa_id:               tarea?.operativo_etapas?.id ?? etapaInicial?.id ?? '',
+    prioridad:              tarea?.prioridad               || 'Media',
+    asignado_a:             tarea?.asignado_a              || '',
+    fecha_inicio_planeada:  tarea?.fecha_inicio_planeada   || '',
+    fecha_limite:           tarea?.fecha_limite            || '',
   })
   const [saving,       setSaving]       = useState(false)
   const [error,        setError]        = useState(null)
@@ -476,13 +501,13 @@ function ModalTarea({ tarea, onClose, onSaved, user }) {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              {/* Estado solo visible en modo asignación */}
+              {/* Etapa solo visible en modo asignación */}
               {!esPropuesta && (
                 <div>
-                  <label className="block text-[12px] font-medium text-gray-600 mb-1.5">Estado</label>
-                  <select value={form.estado} onChange={e => set('estado', e.target.value)}
+                  <label className="block text-[12px] font-medium text-gray-600 mb-1.5">Etapa</label>
+                  <select value={form.etapa_id} onChange={e => set('etapa_id', e.target.value)}
                     className={inputCls} style={border}>
-                    {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
+                    {etapas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
                   </select>
                 </div>
               )}
@@ -495,29 +520,35 @@ function ModalTarea({ tarea, onClose, onSaved, user }) {
               </div>
             </div>
 
+            <div>
+              <label className="block text-[12px] font-medium text-gray-600 mb-1.5">
+                {esPropuesta ? 'Responsable sugerido' : 'Asignado a'}
+              </label>
+              {loadingUsers ? (
+                <div className={inputCls + ' flex items-center gap-2 text-gray-400'} style={border}>
+                  <RefreshCw size={12} className="animate-spin" />
+                  <span className="text-[13px]">Cargando…</span>
+                </div>
+              ) : usuarios.length === 0 ? (
+                <div className={inputCls + ' text-gray-400 text-[13px]'} style={border}>
+                  Sin usuarios disponibles
+                </div>
+              ) : (
+                <select value={form.asignado_a} onChange={e => set('asignado_a', e.target.value)}
+                  className={inputCls} style={border}>
+                  <option value="">Sin asignar</option>
+                  {usuarios.map(u => (
+                    <option key={u.id} value={u.nombre}>{u.nombre}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[12px] font-medium text-gray-600 mb-1.5">
-                  {esPropuesta ? 'Responsable sugerido' : 'Asignado a'}
-                </label>
-                {loadingUsers ? (
-                  <div className={inputCls + ' flex items-center gap-2 text-gray-400'} style={border}>
-                    <RefreshCw size={12} className="animate-spin" />
-                    <span className="text-[13px]">Cargando…</span>
-                  </div>
-                ) : usuarios.length === 0 ? (
-                  <div className={inputCls + ' text-gray-400 text-[13px]'} style={border}>
-                    Sin usuarios disponibles
-                  </div>
-                ) : (
-                  <select value={form.asignado_a} onChange={e => set('asignado_a', e.target.value)}
-                    className={inputCls} style={border}>
-                    <option value="">Sin asignar</option>
-                    {usuarios.map(u => (
-                      <option key={u.id} value={u.nombre}>{u.nombre}</option>
-                    ))}
-                  </select>
-                )}
+                <label className="block text-[12px] font-medium text-gray-600 mb-1.5">Inicio planeado</label>
+                <input type="date" value={form.fecha_inicio_planeada} onChange={e => set('fecha_inicio_planeada', e.target.value)}
+                  className={inputCls} style={border} />
               </div>
               <div>
                 <label className="block text-[12px] font-medium text-gray-600 mb-1.5">Fecha límite</label>
@@ -800,6 +831,15 @@ export default function OperationsModule({ user }) {
   const [error,     setError]     = useState(null)
   const [propuestasCount, setPropuestasCount] = useState(0)
 
+  const [etapas,        setEtapas]        = useState([])
+  const [etapasModalOpen, setEtapasModalOpen] = useState(false)
+
+  // { total, porEtapa: [...], porTipoBase: { pendiente, en_curso, completada, cancelada }, vencidas }
+  const [metricas, setMetricas] = useState(null)
+
+  // id de la tarea que se está arrastrando entre columnas; null = ninguna
+  const [draggedTareaId, setDraggedTareaId] = useState(null)
+
   const [vista, setVista] = useState('kanban')
 
   const [search,            setSearch]            = useState('')
@@ -820,9 +860,11 @@ export default function OperationsModule({ user }) {
     setLoading(true)
     setError(null)
     try {
-      const [rTareas, rPropuestas] = await Promise.allSettled([
+      const [rTareas, rPropuestas, rEtapas, rMetricas] = await Promise.allSettled([
         api.getTareas(adminUser ? {} : { asignado_a: user?.name }),
         api.getPropuestas({ asignado_a: user?.name }),
+        api.getEtapas(),
+        api.getMetricasOperations(),
       ])
       if (rTareas.status === 'fulfilled') setTareas(rTareas.value.data)
       else throw rTareas.reason
@@ -830,6 +872,8 @@ export default function OperationsModule({ user }) {
         const pendientes = rPropuestas.value.data.filter(p => p.estado_propuesta === 'pendiente').length
         setPropuestasCount(pendientes)
       }
+      if (rEtapas.status === 'fulfilled') setEtapas(rEtapas.value.data || [])
+      if (rMetricas.status === 'fulfilled') setMetricas(rMetricas.value)
     } catch (e) {
       setError(e?.message || 'No se pudo conectar con el servidor')
     } finally {
@@ -839,10 +883,10 @@ export default function OperationsModule({ user }) {
 
   useEffect(() => { cargar() }, [cargar])
 
-  const handleCambiarEstado = async (id, nuevoEstado) => {
+  const handleCambiarEtapa = async (id, nuevaEtapaId) => {
     // Se incluyen datos de auditoría para que el backend registre el cambio en tarea_historial
     await api.editarTarea(id, {
-      estado:         nuevoEstado,
+      etapa_id:       nuevaEtapaId,
       usuario_nombre: user?.name  || 'Sistema',
       usuario_id:     user?.email || null,
     })
@@ -866,7 +910,7 @@ export default function OperationsModule({ user }) {
     if (q && !t.titulo?.toLowerCase().includes(q) && !t.descripcion?.toLowerCase().includes(q)) return false
     if (filtroPrioridad !== 'Todos' && t.prioridad !== filtroPrioridad) return false
     if (filtroResponsable && !t.asignado_a?.toLowerCase().includes(filtroResponsable.toLowerCase())) return false
-    if (filtroVencidas && !(t.estado !== 'Completada' && t.estado !== 'Cancelada' && isVencida(t.fecha_limite))) return false
+    if (filtroVencidas && !(!TIPOS_CERRADOS.includes(t.operativo_etapas?.tipo_base) && isVencida(t.fecha_limite))) return false
     return true
   })
 
@@ -875,16 +919,6 @@ export default function OperationsModule({ user }) {
   }
 
   const hayFiltros = search || filtroPrioridad !== 'Todos' || filtroResponsable || filtroVencidas
-
-  const cantVencidas   = tareas.filter(t =>
-    t.estado !== 'Completada' && t.estado !== 'Cancelada' && isVencida(t.fecha_limite)
-  ).length
-  const metricas = {
-    total:       tareas.length,
-    pendientes:  tareas.filter(t => t.estado === 'Pendiente').length,
-    enProceso:   tareas.filter(t => t.estado === 'En Proceso').length,
-    completadas: tareas.filter(t => t.estado === 'Completada').length,
-  }
 
   const tareasOrdenadas = [...tareasFiltradas].sort((a, b) => {
     switch (ordenamiento) {
@@ -910,6 +944,10 @@ export default function OperationsModule({ user }) {
           <p className="text-[13px] text-gray-500 mt-0.5">Gestión de tareas y procesos internos</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setEtapasModalOpen(true)} className={btnSecondary}
+            style={{ borderColor: 'rgba(15,110,86,0.2)' }} title="Configurar etapas">
+            <Settings2 size={14} /> Configurar etapas
+          </button>
           <button onClick={cargar} className={btnSecondary}
             style={{ borderColor: 'rgba(15,110,86,0.2)' }} title="Recargar">
             <RefreshCw size={14} />
@@ -922,11 +960,11 @@ export default function OperationsModule({ user }) {
 
       {/* ── Métricas ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        <StatCard label="Total tareas" value={metricas?.total      ?? '—'} icon={Briefcase}     color="#6366F1" />
-        <StatCard label="Pendientes"   value={metricas?.pendientes  ?? '—'} icon={AlertCircle}   color="#EF9F27" />
-        <StatCard label="En proceso"   value={metricas?.enProceso   ?? '—'} icon={Clock}         color="#0EA5E9" />
-        <StatCard label="Completadas"  value={metricas?.completadas ?? '—'} icon={CheckCircle}   color="#1D9E75" />
-        <StatCard label="Vencidas"     value={loading ? '—' : cantVencidas} icon={AlertTriangle} color="#DC2626"
+        <StatCard label="Total tareas" value={metricas?.total                       ?? '—'} icon={Briefcase}     color="#6366F1" />
+        <StatCard label="Pendientes"   value={metricas?.porTipoBase?.pendiente      ?? '—'} icon={AlertCircle}   color="#EF9F27" />
+        <StatCard label="En proceso"   value={metricas?.porTipoBase?.en_curso       ?? '—'} icon={Clock}         color="#0EA5E9" />
+        <StatCard label="Completadas"  value={metricas?.porTipoBase?.completada     ?? '—'} icon={CheckCircle}   color="#1D9E75" />
+        <StatCard label="Vencidas"     value={loading ? '—' : (metricas?.vencidas ?? 0)} icon={AlertTriangle} color="#DC2626"
           onClick={() => setFiltroVencidas(v => !v)} active={filtroVencidas} />
       </div>
 
@@ -1036,43 +1074,68 @@ export default function OperationsModule({ user }) {
               <div className="flex items-center justify-center h-48 text-gray-400 text-[13.5px]">
                 <RefreshCw size={18} className="animate-spin mr-2" /> Cargando tareas…
               </div>
+            ) : etapas.length === 0 ? (
+              <div className="bg-white rounded-2xl border shadow-sm p-10 text-center"
+                style={{ borderColor: 'rgba(15,110,86,0.15)' }}>
+                <p className="font-semibold text-gray-700 text-[14px]">Todavía no hay etapas configuradas</p>
+                <p className="text-gray-400 text-[12.5px] mt-1 mb-4">
+                  Creá al menos una etapa para poder organizar las tareas del tablero.
+                </p>
+                <button onClick={() => setEtapasModalOpen(true)} className={btnPrimary + ' mx-auto'} style={{ background: '#0F6E56' }}>
+                  <Settings2 size={14} /> Configurar etapas
+                </button>
+              </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
-                {COLUMNS.map(col => {
-                  const colTareas = tareasOrdenadas.filter(t => t.estado === col.id)
+              <div className="flex gap-4 items-start overflow-x-auto pb-2">
+                {etapas.map(et => {
+                  const colTareas = tareasOrdenadas.filter(t => t.operativo_etapas?.id === et.id)
+                  const esInicial = et.id === (etapas.find(e => e.tipo_base === 'pendiente') || etapas[0])?.id
                   return (
-                    <div key={col.id} className="rounded-2xl flex flex-col min-h-[120px]"
-                      style={{ background: col.bg }}>
+                    <div
+                      key={et.id}
+                      className="rounded-2xl flex flex-col min-h-[120px] flex-shrink-0"
+                      style={{ background: et.color + '12', width: '280px' }}
+                      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+                      onDrop={e => {
+                        e.preventDefault()
+                        const tarea = tareas.find(t => t.id === draggedTareaId)
+                        setDraggedTareaId(null)
+                        if (tarea && tarea.operativo_etapas?.id !== et.id) handleCambiarEtapa(tarea.id, et.id)
+                      }}
+                    >
                       <div className="flex items-center justify-between px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <col.icon size={15} style={{ color: col.color }} />
-                          <span className="text-[13px] font-semibold" style={{ color: col.color }}>
-                            {col.label}
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: et.color }} />
+                          <span className="text-[13px] font-semibold truncate" style={{ color: et.color }}>
+                            {et.nombre}
                           </span>
                         </div>
-                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full text-white"
-                          style={{ background: col.color }}>
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full text-white flex-shrink-0"
+                          style={{ background: et.color }}>
                           {colTareas.length}
                         </span>
                       </div>
                       <div className="px-3 pb-3 space-y-3">
                         {colTareas.map(t => (
-                          <TareaCard key={t.id} tarea={t}
+                          <TareaCard key={t.id} tarea={t} etapas={etapas}
                             onEditar={abrirEditar}
                             onEliminar={setConfirmDelete}
-                            onCambiarEstado={handleCambiarEstado}
-                            onHistorial={setTareaHistorial} />
+                            onCambiarEtapa={handleCambiarEtapa}
+                            onHistorial={setTareaHistorial}
+                            isDragging={draggedTareaId === t.id}
+                            onDragStart={() => setDraggedTareaId(t.id)}
+                            onDragEnd={() => setDraggedTareaId(null)} />
                         ))}
                         {colTareas.length === 0 && (
                           <div className="rounded-xl border border-dashed p-4 text-center"
-                            style={{ borderColor: col.color + '50' }}>
-                            <p className="text-[12px]" style={{ color: col.color + 'bb' }}>Sin tareas</p>
+                            style={{ borderColor: et.color + '50' }}>
+                            <p className="text-[12px]" style={{ color: et.color + 'bb' }}>Sin tareas</p>
                           </div>
                         )}
-                        {col.id === 'Pendiente' && (
+                        {esInicial && (
                           <button onClick={abrirNueva}
                             className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] transition-colors hover:bg-white/80"
-                            style={{ color: col.color, border: `1.5px dashed ${col.color}60` }}>
+                            style={{ color: et.color, border: `1.5px dashed ${et.color}60` }}>
                             <Plus size={13} /> Nueva tarea
                           </button>
                         )}
@@ -1090,11 +1153,20 @@ export default function OperationsModule({ user }) {
       {showModal && (
         <ModalTarea
           tarea={editTarea}
+          etapas={etapas}
           user={user}
           onClose={cerrarModal}
           onSaved={() => { cerrarModal(); cargar() }}
         />
       )}
+
+      {/* ── Modal configurar etapas ── */}
+      <EtapasConfigModal
+        open={etapasModalOpen}
+        etapas={etapas}
+        onClose={() => setEtapasModalOpen(false)}
+        onChanged={cargar}
+      />
 
       {/* ── Modal historial de cambios — solo lectura ── */}
       {tareaHistorial && (
