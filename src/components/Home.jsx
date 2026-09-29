@@ -4,7 +4,7 @@ import {
   LayoutGrid, LogOut, Layers, ClipboardCheck, Gauge,
 } from 'lucide-react'
 import logoUrl from '../../resources/logo3.png'
-import { useAllowedModules } from '../lib/permissions'
+import { ROLE_PAGES, useAllowedModules } from '../lib/permissions'
 
 const MODULES = [
   { id: 'finance',       label: 'Finanzas',      icon: TrendingUp },
@@ -19,14 +19,6 @@ const SYSTEM_ITEMS = [
   { id: 'organizacion',  label: 'Organización',  icon: Building2  },
   { id: 'settings',      label: 'Configuración', icon: Settings   },
 ]
-
-const ROLE_PAGES = {
-  'Superadmin': null,
-  'Dirección':  null,
-  'Operativo':  ['dashboard', 'operations'],
-  'Contable':   ['dashboard', 'finance', 'reportes'],
-  'Comercial':  ['dashboard', 'crm'],
-}
 
 function getInitials(name = '') {
   const parts = name.split(' ').filter(Boolean)

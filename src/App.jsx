@@ -14,6 +14,7 @@ import Usuarios from './components/Usuarios'
 import OrganizationModule from './modules/organization/OrganizationModule'
 import IndicadoresModule from './modules/indicadores/IndicadoresModule'
 import AuthCallback from './components/AuthCallback'
+import { getAllowedPages } from './lib/permissions'
 
 function ComingSoon({ title }) {
   return (
@@ -112,7 +113,14 @@ export default function App() {
       {page === 'indicadores'   && <IndicadoresModule />}
       {page === 'finance'       && <FinanceModule user={user} initialTab={financeInitialTab} />}
       {page === 'operations'    && <OperationsModule user={user} />}
-      {page === 'crm'           && <CrmModule />}
+      {page === 'crm'           && (() => {
+        const ap = getAllowedPages(user?.role)
+        return (ap === null || ap.includes('crm'))
+          ? <CrmModule user={user} />
+          : <div className="fade-in flex items-center justify-center h-64">
+              <p className="text-gray-500 text-[14px]">No tenés acceso a este módulo.</p>
+            </div>
+      })()}
       {page === 'protocolos'    && <ProtocolosModule user={user} />}
       {page === 'reportes'      && <ComingSoon title="Reportes" />}
       {page === 'usuarios'      && <Usuarios user={user} />}
