@@ -172,6 +172,11 @@ export const api = {
   eliminarSuscripcion:(id)       => request(`/api/finance/suscripciones/${id}`, { method: 'DELETE' }),
 
   // ── Operations ───────────────────────────────────
+  getEtapas:    ()         => request('/api/operations/etapas'),
+  crearEtapa:   (body)     => request('/api/operations/etapas',      { method: 'POST',  body: JSON.stringify(body) }),
+  editarEtapa:  (id, body) => request(`/api/operations/etapas/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  eliminarEtapa:(id)       => request(`/api/operations/etapas/${id}`, { method: 'DELETE' }),
+
   getTareas: (params = {}) => {
     const qs = new URLSearchParams(
       Object.fromEntries(Object.entries(params).filter(([, v]) => v && v !== 'Todos'))
