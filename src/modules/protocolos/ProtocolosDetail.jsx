@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import { ArrowLeft, Edit3, Plus, RefreshCw, Lock, ClipboardList, History } from 'lucide-react'
+import { ArrowLeft, Edit3, Plus, RefreshCw, Lock, ClipboardList, History, Trash2, AlertCircle } from 'lucide-react'
 import { protocolosApi } from './protocolosApi'
 import { CATEGORIA_LABELS, CATEGORIA_BADGE } from './constants'
 import ProtocoloModal from './ProtocoloModal'
 import PruebaModal from './PruebaModal'
+import AppModal from '../../components/AppModal'
+import { isHighHierarchy } from '../../lib/permissions'
 
 function formatFecha(fechaStr) {
   if (!fechaStr) return '—'
@@ -12,12 +14,80 @@ function formatFecha(fechaStr) {
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-export default function ProtocolosDetail({ protocoloId, onBack, onOpenPrueba }) {
+// Sin `status` = el fetch no llegó al servidor (TypeError) o la respuesta no era JSON.
+function mensajeErrorEliminar(err) {
+  switch (err?.status) {
+    case 401: return 'Tu sesión expiró. Volvé a iniciar sesión.'
+    case 403: return 'No tenés permisos para eliminar este protocolo.'
+    case 404: return 'El protocolo ya no existe o fue eliminado.'
+    case 409: return err.message || 'No se puede eliminar el protocolo porque tiene registros asociados.'
+    case undefined:
+      return err instanceof TypeError
+        ? 'No se pudo conectar con el servidor. Revisá tu conexión e intentá nuevamente.'
+        : 'No se pudo eliminar el protocolo. Intentá nuevamente.'
+    default: return 'No se pudo eliminar el protocolo. Intentá nuevamente.'
+  }
+}
+
+function ConfirmarEliminarProtocolo({ protocolo, registros, onCancel, onDeleted }) {
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState(null)
+
+  const confirmar = () => {
+    setDeleting(true)
+    setError(null)
+    protocolosApi.eliminar(protocolo.id)
+      .then(res => onDeleted(res))
+      .catch(err => { setError(mensajeErrorEliminar(err)); setDeleting(false) })
+  }
+
+  return (
+    <AppModal onClose={deleting ? () => {} : onCancel} maxWidth="max-w-md">
+      <div className="p-6">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: '#FEE2E2' }}>
+          <Trash2 size={18} style={{ color: '#B91C1C' }} />
+        </div>
+        <h3 className="font-serif text-[17px] font-semibold text-gray-900">Eliminar protocolo</h3>
+        <p className="text-[13px] text-gray-600 mt-1.5">
+          <span className="font-semibold">{protocolo.nombre}</span>
+        </p>
+        <p className="text-[13px] text-gray-500 mt-2 leading-relaxed">
+          ¿Estás seguro de que querés eliminar este protocolo? Esta acción no se puede deshacer.
+          {registros > 0 && (
+            <> También se eliminarán {registros} {registros === 1 ? 'registro asociado' : 'registros asociados'}.</>
+          )}
+        </p>
+        {error && (
+          <div className="flex items-start gap-1.5 text-[12.5px] text-red-600 mt-3">
+            <AlertCircle size={14} className="flex-shrink-0 mt-0.5" /> {error}
+          </div>
+        )}
+        <div className="flex justify-end gap-2.5 mt-5">
+          <button onClick={onCancel} disabled={deleting}
+            className="px-4 py-2.5 rounded-xl border text-[13.5px] font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            style={{ borderColor: 'rgba(15,110,86,0.2)' }}>
+            Cancelar
+          </button>
+          <button onClick={confirmar} disabled={deleting}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[13.5px] font-semibold text-white transition-colors disabled:opacity-60"
+            style={{ background: '#B91C1C' }}>
+            {deleting ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            {deleting ? 'Eliminando…' : 'Eliminar protocolo'}
+          </button>
+        </div>
+      </div>
+    </AppModal>
+  )
+}
+
+export default function ProtocolosDetail({ protocoloId, user, onBack, onOpenPrueba, onDeleted }) {
   const [protocolo, setProtocolo] = useState(null)
   const [pruebas, setPruebas] = useState([])
   const [loading, setLoading] = useState(true)
   const [showEdit, setShowEdit] = useState(false)
   const [showPrueba, setShowPrueba] = useState(false)
+  const [showDelete, setShowDelete] = useState(false)
+  const puedeEliminar = isHighHierarchy(user)
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -72,7 +142,7 @@ export default function ProtocolosDetail({ protocoloId, onBack, onOpenPrueba }) 
             </div>
             <div>
               <p className="text-[14px] font-semibold text-gray-900">{pruebas.length}</p>
-              <p className="text-[12px] text-gray-400">Pruebas registradas</p>
+              <p className="text-[12px] text-gray-400">Registros</p>
             </div>
             {protocolo.acceso && (
               <div>
@@ -82,11 +152,19 @@ export default function ProtocolosDetail({ protocoloId, onBack, onOpenPrueba }) 
             )}
             <div>
               <p className="text-[14px] font-semibold text-gray-900">{ultimaPrueba ? formatFecha(ultimaPrueba.fecha) : '—'}</p>
-              <p className="text-[12px] text-gray-400">Última prueba</p>
+              <p className="text-[12px] text-gray-400">Último registro</p>
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {puedeEliminar && (
+            <button onClick={() => setShowDelete(true)}
+              title="Eliminar protocolo" aria-label="Eliminar protocolo"
+              className="flex items-center justify-center w-10 h-10 rounded-xl border text-gray-400 bg-white hover:bg-red-50 hover:text-red-600 transition-colors"
+              style={{ borderColor: 'rgba(15,110,86,0.2)' }}>
+              <Trash2 size={15} />
+            </button>
+          )}
           <button onClick={() => setShowEdit(true)}
             className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border text-[13px] font-medium text-gray-600 bg-white hover:bg-gray-50 transition-colors"
             style={{ borderColor: 'rgba(15,110,86,0.2)' }}>
@@ -95,7 +173,7 @@ export default function ProtocolosDetail({ protocoloId, onBack, onOpenPrueba }) 
           <button onClick={() => setShowPrueba(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-[13px] font-medium shadow-sm"
             style={{ background: '#0F6E56' }}>
-            <Plus size={15} /> Nueva prueba
+            <Plus size={15} /> Nuevo registro
           </button>
         </div>
       </div>
@@ -123,7 +201,7 @@ export default function ProtocolosDetail({ protocoloId, onBack, onOpenPrueba }) 
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
         <div className="px-6 pt-5 pb-1">
           <h4 className="font-serif font-semibold text-gray-900 text-[15px] flex items-center gap-2">
-            <History size={16} style={{ color: '#0F6E56' }} /> Trazabilidad — historial de pruebas
+            <History size={16} style={{ color: '#0F6E56' }} /> Trazabilidad — historial de registros
           </h4>
         </div>
         <div className="overflow-x-auto">
@@ -165,7 +243,7 @@ export default function ProtocolosDetail({ protocoloId, onBack, onOpenPrueba }) 
               {pruebas.length === 0 && (
                 <tr>
                   <td colSpan={5} className="py-10 text-center text-gray-400 text-[13.5px]">
-                    Todavía no se registraron pruebas para este protocolo.
+                    Todavía no hay registros para este protocolo.
                   </td>
                 </tr>
               )}
@@ -186,6 +264,14 @@ export default function ProtocolosDetail({ protocoloId, onBack, onOpenPrueba }) 
           protocolo={protocolo}
           onClose={() => setShowPrueba(false)}
           onSaved={() => { setShowPrueba(false); cargar() }}
+        />
+      )}
+      {showDelete && (
+        <ConfirmarEliminarProtocolo
+          protocolo={protocolo}
+          registros={pruebas.length}
+          onCancel={() => setShowDelete(false)}
+          onDeleted={(res) => { setShowDelete(false); onDeleted?.(res) }}
         />
       )}
     </div>

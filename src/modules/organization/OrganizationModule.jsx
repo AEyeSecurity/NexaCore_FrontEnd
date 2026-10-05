@@ -99,6 +99,52 @@ function getNodePersona(node) {
   }
 }
 
+// ── Layout vertical por nivel jerárquico ──────────────────────
+// La altura de un nodo la define su `hierarchyLevel` (backend), no la profundidad
+// padre/hijo. HIGH/MEDIUM/LOW son bandas fijas: si un hijo salta una banda
+// (HIGH → LOW) la banda intermedia conserva su espacio y la línea la atraviesa.
+// NONE (externos) y null (sin rol) no tienen banda: van justo debajo del superior.
+const HIERARCHY_BANDS = { HIGH: 0, MEDIUM: 1, LOW: 2 }
+
+// Alto fijo del casillero de un nodo con hijos (tarjeta + tramo de línea): así
+// todas las filas quedan alineadas aunque las tarjetas tengan alto distinto.
+const ORG_CARD_SLOT = 140
+const ORG_STEM      = 22 // línea bajo el casillero (igual a .org-child-connector)
+const ORG_ROW_PITCH = ORG_CARD_SLOT + ORG_STEM * 2
+
+function getHierarchyBand(node) {
+  const level = node.hierarchyLevel
+  if (level === 'NONE' || (level == null && node.es_externo)) return null
+  return HIERARCHY_BANDS[level] ?? null
+}
+
+// Fila visual de cada nodo. Un nodo con banda nunca queda por encima de su
+// superior (datos invertidos o mismo nivel → fila siguiente).
+function computeOrgRows(nodes) {
+  const byId = new Map(nodes.map(n => [n.id, n]))
+  const rows = new Map()
+  const visiting = new Set()
+
+  const rowOf = (node) => {
+    if (rows.has(node.id)) return rows.get(node.id)
+    visiting.add(node.id)
+    const parent = node.superior_id ? byId.get(node.superior_id) : null
+    // visiting corta ciclos en superior_id: el nodo se trata como raíz
+    const parentRow = parent && !visiting.has(parent.id) ? rowOf(parent) : null
+    visiting.delete(node.id)
+
+    const band = getHierarchyBand(node)
+    let row
+    if (parentRow === null) row = band ?? 0
+    else row = band === null ? parentRow + 1 : Math.max(band, parentRow + 1)
+    rows.set(node.id, row)
+    return row
+  }
+
+  nodes.forEach(rowOf)
+  return rows
+}
+
 // ── Componente: tarjeta de nodo en el árbol ───────────────────
 
 function OrgCard({ node, isSelected, onClick }) {
@@ -178,21 +224,36 @@ function OrgCard({ node, isSelected, onClick }) {
 
 // ── Componente: rama recursiva del árbol ──────────────────────
 
-function TreeBranch({ node, allNodes, onSelect, selectedId }) {
+// rows: Map id → fila visual (computeOrgRows). parentRow: fila del superior
+// (para raíces, la fila anterior a la raíz más alta). Cada fila de diferencia
+// extra se dibuja como un tramo de línea de ORG_ROW_PITCH; en raíces es transparente.
+function TreeBranch({ node, allNodes, rows, parentRow = -1, isRoot = false, onSelect, selectedId }) {
   const children = allNodes.filter(n => n.superior_id === node.id)
+  const row      = rows?.get(node.id) ?? parentRow + 1
+  const skipped  = Math.max(0, row - parentRow - 1)
 
   return (
     <div className="flex flex-col items-center" style={{ minWidth: 164 }}>
-      <OrgCard
-        node={node}
-        isSelected={selectedId === node.id}
-        onClick={() => onSelect(node)}
-      />
+      {skipped > 0 && (
+        <div style={{ width: 1, height: skipped * ORG_ROW_PITCH, background: isRoot ? 'transparent' : '#CBD5E1', flexShrink: 0 }} />
+      )}
+
+      <div className="flex flex-col items-center" style={children.length > 0 ? { height: ORG_CARD_SLOT } : undefined}>
+        <div style={{ flexShrink: 0 }}>
+          <OrgCard
+            node={node}
+            isSelected={selectedId === node.id}
+            onClick={() => onSelect(node)}
+          />
+        </div>
+        {/* Tramo hasta el borde del casillero (tarjetas más bajas que el slot) */}
+        {children.length > 0 && <div style={{ width: 1, flex: 1, background: '#CBD5E1' }} />}
+      </div>
 
       {children.length > 0 && (
         <>
           {/* Línea vertical hacia abajo */}
-          <div style={{ width: 1, height: 22, background: '#CBD5E1' }} />
+          <div style={{ width: 1, height: ORG_STEM, background: '#CBD5E1', flexShrink: 0 }} />
 
           {/* Fila de hijos con líneas horizontales */}
           <div className="org-children-row">
@@ -202,6 +263,8 @@ function TreeBranch({ node, allNodes, onSelect, selectedId }) {
                 <TreeBranch
                   node={child}
                   allNodes={allNodes}
+                  rows={rows}
+                  parentRow={row}
                   onSelect={onSelect}
                   selectedId={selectedId}
                 />
@@ -1342,23 +1405,27 @@ export default function OrganizationModule({ user }) {
                     {/* Raíces del árbol */}
                     {(() => {
                       const roots = orgNodes.filter(n => !n.superior_id)
+                      const rows  = computeOrgRows(orgNodes)
+                      // Las raíces se ubican en su banda; la más alta queda arriba de todo.
+                      const drawn = roots.length > 0 ? roots : orgNodes
+                      const base  = Math.min(...drawn.map(n => rows.get(n.id) ?? 0)) - 1
                       if (roots.length === 0) {
                         // Si hay nodos pero ninguno es raíz (estado inconsistente), mostrarlos igual
                         return (
                           <div className="flex gap-8 flex-wrap justify-center">
                             {orgNodes.map(n => (
-                              <TreeBranch key={n.id} node={n} allNodes={orgNodes} onSelect={handleSelectNode} selectedId={selectedNode?.id} />
+                              <TreeBranch key={n.id} node={n} allNodes={orgNodes} rows={rows} parentRow={base} isRoot onSelect={handleSelectNode} selectedId={selectedNode?.id} />
                             ))}
                           </div>
                         )
                       }
                       if (roots.length === 1) {
-                        return <TreeBranch node={roots[0]} allNodes={orgNodes} onSelect={handleSelectNode} selectedId={selectedNode?.id} />
+                        return <TreeBranch node={roots[0]} allNodes={orgNodes} rows={rows} parentRow={base} isRoot onSelect={handleSelectNode} selectedId={selectedNode?.id} />
                       }
                       return (
-                        <div className="flex gap-8 flex-wrap justify-center">
+                        <div className="flex gap-8 flex-wrap justify-center items-start">
                           {roots.map(r => (
-                            <TreeBranch key={r.id} node={r} allNodes={orgNodes} onSelect={handleSelectNode} selectedId={selectedNode?.id} />
+                            <TreeBranch key={r.id} node={r} allNodes={orgNodes} rows={rows} parentRow={base} isRoot onSelect={handleSelectNode} selectedId={selectedNode?.id} />
                           ))}
                         </div>
                       )

@@ -226,7 +226,12 @@ export const api = {
   crearUsuario:   (body)     => request('/api/rbac/usuarios',       { method: 'POST',   body: JSON.stringify(body) }),
   editarUsuario:  (id, body) => request(`/api/rbac/usuarios/${id}`, { method: 'PUT',    body: JSON.stringify(body) }),
   eliminarUsuario:(id)       => request(`/api/rbac/usuarios/${id}`, { method: 'DELETE' }),
+  // GET /api/rbac/roles → { data: [{ id, nombre, activo, nivel_jerarquico, ... }] }
+  // Incluye roles legacy (activo=false): solo se usan para mostrar el rol actual.
   getRoles:              () => request('/api/rbac/roles'),
+  // GET /api/rbac/perfil (Bearer) → { id, nombre, rol, hierarchyLevel: 'HIGH'|'MEDIUM'|'LOW'|'NONE'|null }
+  // Perfil del usuario de la sesión; `id` es public.usuarios.id (no el UID de Supabase Auth).
+  getPerfil:      ()         => request('/api/rbac/perfil'),
 
   // ── Organización ──────────────────────────────────
   getOrganigrama:       ()           => request('/api/organizacion/organigrama'),
@@ -273,6 +278,8 @@ export const api = {
   crearProtocolo:  (body)     => request('/api/protocolos',      { method: 'POST', body: JSON.stringify(body) }),
   editarProtocolo: (id, body) => request(`/api/protocolos/${id}`, { method: 'PUT',  body: JSON.stringify(body) }),
   guardarItemsProtocolo: (id, items) => request(`/api/protocolos/${id}/items`, { method: 'PUT', body: JSON.stringify({ items }) }),
+  // DELETE /api/protocolos/:id (solo hierarchyLevel HIGH) → { message, id, nombre, registrosEliminados }
+  eliminarProtocolo: (id) => request(`/api/protocolos/${id}`, { method: 'DELETE' }),
 
   registrarPruebaProtocolo: (id, body) => request(`/api/protocolos/${id}/pruebas`, { method: 'POST', body: JSON.stringify(body) }),
   getPruebasProtocolo:      (id)       => request(`/api/protocolos/${id}/pruebas`),

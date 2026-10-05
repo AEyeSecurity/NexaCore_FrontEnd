@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { logout, getSession } from './lib/auth'
 import { supabase } from './lib/supabase'
+import { api } from './lib/api'
 import Login from './components/Login'
 import Home from './components/Home'
 import Layout from './components/Layout'
@@ -63,6 +64,27 @@ export default function App() {
 
     return () => subscription.unsubscribe()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // id (public.usuarios.id) y hierarchyLevel los resuelve el backend desde el token
+  // de la sesión (/api/rbac/perfil). Solo se pide con `user` cargado, que implica
+  // una sesión de Supabase activa; el email solo dispara la recarga si cambia el usuario.
+  // No se guardan en el caché de sesión para no quedar desactualizados.
+  // Mientras carga (o si falla, incl. 401) quedan undefined: las acciones de mando alto
+  // quedan ocultas y Operativo usa el fallback por nombre. No se cierra la sesión acá:
+  // la expiración real la maneja onAuthStateChange (SIGNED_OUT).
+  const userEmail = user?.email
+  useEffect(() => {
+    if (!userEmail) return
+    let alive = true
+    api.getPerfil()
+      .then(perfil => {
+        if (alive) setUser(u => (u?.email === userEmail
+          ? { ...u, id: perfil?.id ?? undefined, hierarchyLevel: perfil?.hierarchyLevel ?? null }
+          : u))
+      })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [userEmail])
 
   const navigate = (targetPage, opts = {}) => {
     // Al navegar a Finance, registrar el tab inicial si se indica; limpiar si no

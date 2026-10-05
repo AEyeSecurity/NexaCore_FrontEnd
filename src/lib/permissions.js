@@ -20,6 +20,12 @@ export function getAllowedPages(role) {
   return ROLE_PAGES[role] ?? null
 }
 
+// Mando alto según el nivel jerárquico que devuelve el backend (/api/rbac/perfil).
+// Solo oculta/mostrar acciones: la autorización real la valida el backend (403).
+export function isHighHierarchy(user) {
+  return user?.hierarchyLevel === 'HIGH'
+}
+
 // Módulos habilitados según la Matriz de permisos (usuario > rol). La única
 // fuente accesible para cualquier usuario es GET /api/dashboard/config.
 // Mientras carga (o si falla) devuelve [] → lo que depende de él queda oculto.

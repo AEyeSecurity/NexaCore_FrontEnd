@@ -70,6 +70,20 @@ export default function Usuarios({ user }) {
   const hasUserActions = (u) => canEditUser(u) || canDeleteUser(u)
   // ─────────────────────────────────────────────────────────────
 
+  // Solo los roles activos se pueden asignar. GET /api/rbac/roles también trae
+  // los legacy (activo=false, ej. "Mando Medio") para poder mostrar el rol actual.
+  const rolesAsignables = roles.filter(r => r.activo !== false)
+  // Usuario legacy en edición: su rol actual se muestra (sin convertirlo) solo en
+  // su propio formulario, para que el selector no quede vacío; el backend acepta
+  // reenviarlo sin cambios. Si la lista de roles no cargó, se muestra sin marcarlo legacy.
+  const rolEditado = modal && modal !== 'nuevo' && modal.rol_id
+    && !rolesAsignables.some(r => r.id === modal.rol_id)
+    ? roles.find(r => r.id === modal.rol_id) || { id: modal.rol_id, nombre: modal.roles?.nombre || 'Rol actual' }
+    : null
+  const rolActualLegacy = rolEditado
+    ? { id: rolEditado.id, nombre: rolEditado.nombre, legacy: rolEditado.activo === false }
+    : null
+
   const cargar = useCallback(async () => {
     setLoading(true)
     try {
@@ -82,7 +96,7 @@ export default function Usuarios({ user }) {
   useEffect(() => { cargar() }, [cargar])
 
   const abrirNuevo = () => {
-    setForm({ email: '', nombre: '', rol_id: roles[0]?.id || '', estado: 'Activo', password: '' })
+    setForm({ email: '', nombre: '', rol_id: rolesAsignables[0]?.id || '', estado: 'Activo', password: '' })
     setError(null)
     setModal('nuevo')
   }
@@ -294,10 +308,18 @@ export default function Usuarios({ user }) {
                   <select value={form.rol_id} onChange={e => set('rol_id')(e.target.value)}
                     required className={inputCls + ' appearance-none pr-8'} style={inputStyle}>
                     <option value="">Seleccionar rol</option>
-                    {roles.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                    {rolActualLegacy && (
+                      <option value={rolActualLegacy.id}>{rolActualLegacy.nombre}{rolActualLegacy.legacy ? ' (rol anterior, no asignable)' : ''}</option>
+                    )}
+                    {rolesAsignables.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
                   </select>
                   <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 </div>
+                {rolActualLegacy?.legacy && form.rol_id === rolActualLegacy.id && (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Este rol ya no está disponible para nuevas asignaciones. Podés conservarlo o elegir uno vigente.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-[11.5px] font-medium text-gray-500 mb-1.5 block">Estado</label>

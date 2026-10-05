@@ -3,7 +3,7 @@ import {
   Search, RefreshCw, Trash2, X, User, Calendar, Edit2, AlertTriangle,
   Send, ThumbsUp, ThumbsDown, Inbox, History, Settings2,
 } from 'lucide-react'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../../lib/api'
 import EtapasConfigModal from './EtapasConfigModal'
@@ -12,7 +12,7 @@ import EtapasConfigModal from './EtapasConfigModal'
 // Las etapas del tablero (columnas) son 100% personalizables y vienen de
 // GET /api/operations/etapas — ya no hay 4 columnas fijas. `tipo_base` es el
 // único enum que sigue siendo fijo (lo define el schema del backend).
-const TIPOS_CERRADOS = ['completada', 'cancelada']
+const TIPOS_CERRADOS = ['completada', 'cancelada', 'en_revision_cerrada']
 
 const PRIORIDADES  = ['Alta', 'Media', 'Baja']
 const ROLES_ADMIN  = ['Superadmin', 'Dirección']
@@ -66,6 +66,68 @@ function diasVencida(fechaLimite) {
   const dias   = Math.round((hoy - limite) / 86400000)
   if (dias === 1) return 'hace 1 día'
   return `hace ${dias} días`
+}
+
+// Responsables de una tarea. `asignados` (relación real con usuarios) es la fuente;
+// `asignado_a` solo se usa como fallback para tareas históricas que el backend no
+// pudo vincular a un usuario (asignados: [] con texto libre). No se infieren ids.
+function getResponsables(tarea) {
+  const asignados = Array.isArray(tarea?.asignados) ? tarea.asignados : []
+  if (asignados.length) return { nombres: asignados.map(a => a.nombre).filter(Boolean), historico: false }
+  const texto = tarea?.asignado_a?.trim()
+  return texto ? { nombres: [texto], historico: true } : { nombres: [], historico: false }
+}
+
+// "Ana, Beto" — con más de `max` personas: "Ana, Beto +2"
+function fmtResponsables(nombres, max = 2) {
+  if (nombres.length <= max) return nombres.join(', ')
+  return `${nombres.slice(0, max).join(', ')} +${nombres.length - max}`
+}
+
+// ¿La tarea es del usuario actual? Con `asignados` se compara solo por usuarios.id
+// (user.id viene de /api/rbac/perfil), así una tarea compartida [A, B] es de A y de B
+// y dos usuarios con el mismo nombre no se mezclan. Solo las tareas históricas sin
+// vínculo (asignados: [] + asignado_a) caen al fallback legacy por nombre.
+function esResponsable(tarea, user) {
+  const asignados = Array.isArray(tarea?.asignados) ? tarea.asignados : []
+  if (asignados.length) return !!user?.id && asignados.some(a => a.id === user.id)
+  return !!user?.name && tarea?.asignado_a?.trim() === user.name
+}
+
+// Tareas/propuestas del usuario actual. Con user.id: asignado_id (normalizadas,
+// incluye compartidas) + históricas sin vínculo pedidas aparte por nombre, de las
+// que solo se conservan las que no tienen `asignados` (no se mezclan homónimos).
+// No se envían ambos parámetros juntos: el backend los combina como OR.
+// Sin user.id (perfil aún no cargado o fallido) se usa el filtro legacy por nombre.
+async function fetchPropias(fetcher, user) {
+  if (!user?.id) return fetcher({ asignado_a: user?.name })
+  const [porId, porNombre] = await Promise.all([
+    fetcher({ asignado_id: user.id }),
+    user.name ? fetcher({ asignado_a: user.name }).catch(() => ({ data: [] })) : { data: [] },
+  ])
+  const vistos = new Set((porId.data ?? []).map(t => t.id))
+  const historicas = (porNombre.data ?? []).filter(t =>
+    !vistos.has(t.id) && !(t.asignados?.length) && esResponsable(t, user))
+  const data = [...(porId.data ?? []), ...historicas]
+    .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
+  return { ...porId, data }
+}
+
+// Línea "responsables" de tarjetas (tarea y propuesta). null si no hay nadie.
+function ResponsablesLinea({ tarea, prefijo }) {
+  const { nombres, historico } = getResponsables(tarea)
+  if (!nombres.length) return null
+  return (
+    <div className="flex items-center gap-1.5 text-[11.5px] text-gray-500 min-w-0"
+      title={historico ? `Responsable histórico (sin usuario vinculado): ${nombres[0]}` : nombres.join(', ')}>
+      <User size={11} className="shrink-0" />
+      <span className="truncate">
+        {prefijo && <>{prefijo} </>}
+        <span className={prefijo ? 'font-medium text-gray-700' : undefined}>{fmtResponsables(nombres)}</span>
+        {historico && <span className="text-gray-400"> · histórico</span>}
+      </span>
+    </div>
+  )
 }
 
 // ── StatCard ──────────────────────────────────────────────────────────────────
@@ -124,7 +186,7 @@ function ModalHistorial({ tarea, onClose }) {
     estado:                'estado',
     etapa_id:              'etapa',
     prioridad:             'prioridad',
-    asignado_a:            'responsable',
+    asignado_a:            'responsables',
     fecha_inicio_planeada: 'inicio planeado',
     fecha_limite:          'fecha límite',
     fecha_inicio_real:     'inicio real',
@@ -312,12 +374,7 @@ function TareaCard({ tarea, etapas, onEditar, onEliminar, onCambiarEtapa, onHist
       </div>
 
       <div className="space-y-1">
-        {tarea.asignado_a && (
-          <div className="flex items-center gap-1.5 text-[11.5px] text-gray-500">
-            <User size={11} className="shrink-0" />
-            <span className="truncate">{tarea.asignado_a}</span>
-          </div>
-        )}
+        <ResponsablesLinea tarea={tarea} />
         {tarea.fecha_limite && (
           <div className="flex items-center gap-1.5 text-[11.5px]"
             style={{ color: vencida ? '#DC2626' : '#6B7280' }}>
@@ -374,10 +431,13 @@ function ModalTarea({ tarea, etapas, onClose, onSaved, user }) {
     descripcion:            tarea?.descripcion             || '',
     etapa_id:               tarea?.operativo_etapas?.id ?? etapaInicial?.id ?? '',
     prioridad:              tarea?.prioridad               || 'Media',
-    asignado_a:             tarea?.asignado_a              || '',
     fecha_inicio_planeada:  tarea?.fecha_inicio_planeada   || '',
     fecha_limite:           tarea?.fecha_limite            || '',
   })
+  // Responsables: un selector por fila con el usuario_id ('' = selector vacío).
+  // Siempre hay al menos un selector visible; la asignación sigue siendo opcional.
+  const asignadosOriginales = (tarea?.asignados ?? []).map(a => a.id)
+  const [asignados, setAsignados] = useState(asignadosOriginales.length ? asignadosOriginales : [''])
   const [saving,       setSaving]       = useState(false)
   const [error,        setError]        = useState(null)
   const [usuarios,     setUsuarios]     = useState([])
@@ -385,10 +445,33 @@ function ModalTarea({ tarea, etapas, onClose, onSaved, user }) {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  // Para usuarios comunes: el modo se deriva automáticamente del responsable elegido
+  // Ids finales sin vacíos ni duplicados (defensivo: los selectores ya los excluyen).
+  const asignadosIds = [...new Set(asignados.filter(Boolean))]
+
+  // Opciones posibles: usuarios asignables (activos) + los ya asignados a la tarea,
+  // aunque hoy estén inactivos, para que su selector no quede vacío.
+  const opcionesUsuarios = [
+    ...usuarios,
+    ...(tarea?.asignados ?? []).filter(a => !usuarios.some(u => u.id === a.id)),
+  ]
+  const nombreUsuario = (id) => opcionesUsuarios.find(u => u.id === id)?.nombre
+
+  const setAsignadoAt = (i, id) => setAsignados(prev => prev.map((v, j) => (j === i ? id : v)))
+  const quitarAsignado = (i) => setAsignados(prev => prev.filter((_, j) => j !== i))
+  // No se acumulan selectores vacíos ni se ofrece agregar si no quedan personas.
+  const puedeAgregar = !asignados.some(id => !id) && asignadosIds.length < opcionesUsuarios.length
+  const agregarAsignado = () => { if (puedeAgregar) setAsignados(prev => [...prev, '']) }
+
+  // Para usuarios comunes: el modo se deriva automáticamente de los responsables
+  // elegidos. Sin nadie, o si uno mismo está entre ellos (aunque haya otros) =
+  // asignación; solo otras personas = propuesta. Se compara por usuarios.id; el
+  // nombre queda como fallback únicamente si el perfil todavía no trajo user.id.
+  const incluyeAlUsuario = user?.id
+    ? asignadosIds.includes(user.id)
+    : asignadosIds.some(id => nombreUsuario(id) === user?.name)
   const modoEfectivo = adminUser
     ? modo
-    : (!form.asignado_a || form.asignado_a === user?.name) ? 'asignacion' : 'propuesta'
+    : (asignadosIds.length === 0 || incluyeAlUsuario) ? 'asignacion' : 'propuesta'
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
@@ -405,8 +488,15 @@ function ModalTarea({ tarea, etapas, onClose, onSaved, user }) {
     setSaving(true)
     setError(null)
     try {
+      // `asignados` es la lista final completa de usuario_id. Al editar solo se envía
+      // si cambió: así una tarea histórica (asignados: [] + asignado_a con texto)
+      // no pierde su responsable al guardar otros campos.
+      const asignadosCambiaron = !tarea
+        || asignadosIds.length !== asignadosOriginales.length
+        || asignadosIds.some((id, i) => id !== asignadosOriginales[i])
       const payload = {
         ...form,
+        ...(asignadosCambiaron ? { asignados: asignadosIds } : {}),
         tipo: modoEfectivo,
         // Datos de auditoría: el backend los usa para tarea_historial y los descarta antes de guardar en tareas
         usuario_nombre: user?.name  || 'Sistema',
@@ -522,25 +612,56 @@ function ModalTarea({ tarea, etapas, onClose, onSaved, user }) {
 
             <div>
               <label className="block text-[12px] font-medium text-gray-600 mb-1.5">
-                {esPropuesta ? 'Responsable sugerido' : 'Asignado a'}
+                {esPropuesta ? 'Responsables sugeridos' : 'Responsables'}
               </label>
+              {/* Tarea histórica sin usuario vinculado: se muestra el texto, sin inventar un id */}
+              {tarea && !asignadosOriginales.length && tarea.asignado_a?.trim() && (
+                <p className="text-[11.5px] text-gray-500 mb-1.5">
+                  Responsable histórico: <span className="font-medium text-gray-700">{tarea.asignado_a}</span>
+                  <span className="text-gray-400"> · elegí usuarios abajo para vincularlo</span>
+                </p>
+              )}
               {loadingUsers ? (
                 <div className={inputCls + ' flex items-center gap-2 text-gray-400'} style={border}>
                   <RefreshCw size={12} className="animate-spin" />
                   <span className="text-[13px]">Cargando…</span>
                 </div>
-              ) : usuarios.length === 0 ? (
+              ) : opcionesUsuarios.length === 0 ? (
                 <div className={inputCls + ' text-gray-400 text-[13px]'} style={border}>
                   Sin usuarios disponibles
                 </div>
               ) : (
-                <select value={form.asignado_a} onChange={e => set('asignado_a', e.target.value)}
-                  className={inputCls} style={border}>
-                  <option value="">Sin asignar</option>
-                  {usuarios.map(u => (
-                    <option key={u.id} value={u.nombre}>{u.nombre}</option>
-                  ))}
-                </select>
+                <div className="space-y-2">
+                  {asignados.map((id, i) => {
+                    // Cada selector excluye a los elegidos en los otros, pero conserva el propio
+                    const disponibles = opcionesUsuarios.filter(u => u.id === id || !asignados.includes(u.id))
+                    return (
+                      <div key={i} className="flex items-center gap-2">
+                        <select value={id} onChange={e => setAsignadoAt(i, e.target.value)}
+                          className={inputCls} style={border}>
+                          <option value="">{i === 0 ? 'Sin asignar' : 'Seleccionar persona'}</option>
+                          {disponibles.map(u => (
+                            <option key={u.id} value={u.id}>
+                              {u.nombre}{u.estado && u.estado !== 'Activo' ? ' (inactivo)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                        {i > 0 && (
+                          <button type="button" onClick={() => quitarAsignado(i)}
+                            className="p-1.5 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors shrink-0"
+                            title="Quitar responsable" aria-label="Quitar responsable">
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                  <button type="button" onClick={agregarAsignado} disabled={!puedeAgregar}
+                    className="flex items-center gap-1.5 text-[12px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{ color: '#0F6E56' }}>
+                    <Plus size={13} /> Agregar otra persona
+                  </button>
+                </div>
               )}
             </div>
 
@@ -615,12 +736,7 @@ function PropuestaCard({ propuesta, canAct, onAprobar, onRechazar }) {
           <Send size={11} className="shrink-0" style={{ color: '#6366F1' }} />
           <span>Propuesto por: <span className="font-medium text-gray-700">{propuesta.propuesto_por}</span></span>
         </div>
-        {propuesta.asignado_a && (
-          <div className="flex items-center gap-1.5 text-[11.5px] text-gray-500">
-            <User size={11} className="shrink-0" />
-            <span>Para: <span className="font-medium text-gray-700">{propuesta.asignado_a}</span></span>
-          </div>
-        )}
+        <ResponsablesLinea tarea={propuesta} prefijo="Para:" />
         {propuesta.fecha_limite && (
           <div className="flex items-center gap-1.5 text-[11.5px] text-gray-500">
             <Calendar size={11} className="shrink-0" />
@@ -676,7 +792,8 @@ function PropuestasView({ user, onKanbanRefresh }) {
       } else {
         // Usuarios comunes: dos llamadas separadas
         const [rRec, rEnv] = await Promise.allSettled([
-          api.getPropuestas({ asignado_a:   user?.name }),
+          fetchPropias(api.getPropuestas, user),
+          // propuesto_por sigue siendo texto en backend (legacy): se filtra por nombre
           api.getPropuestas({ propuesto_por: user?.name }),
         ])
         if (rRec.status === 'fulfilled') setRecibidas(rRec.value.data)
@@ -707,7 +824,7 @@ function PropuestasView({ user, onKanbanRefresh }) {
 
   // Admins: filtro "Solo las mías" sobre recibidas
   const recibidasVis = adminUser && soloMias
-    ? recibidas.filter(p => p.asignado_a === user?.name)
+    ? recibidas.filter(p => esResponsable(p, user))
     : recibidas
 
   const lista    = subVista === 'recibidas' ? recibidasVis
@@ -844,7 +961,9 @@ export default function OperationsModule({ user }) {
 
   const [search,            setSearch]            = useState('')
   const [filtroPrioridad,   setFiltroPrioridad]   = useState('Todos')
+  // usuario_id del responsable a filtrar ('' = todos). Incluye tareas compartidas.
   const [filtroResponsable, setFiltroResponsable] = useState('')
+  const [usuariosFiltro,    setUsuariosFiltro]    = useState([])
   const [filtroVencidas,    setFiltroVencidas]    = useState(false)
   const [ordenamiento,      setOrdenamiento]      = useState('created_at')
 
@@ -856,16 +975,25 @@ export default function OperationsModule({ user }) {
 
   const adminUser = esAdmin(user)
 
+  // Cambiar el filtro de responsable recarga: solo se aplica la respuesta más reciente.
+  const cargaActual = useRef(0)
+
   const cargar = useCallback(async () => {
+    const carga = ++cargaActual.current
     setLoading(true)
     setError(null)
     try {
       const [rTareas, rPropuestas, rEtapas, rMetricas] = await Promise.allSettled([
-        api.getTareas(adminUser ? {} : { asignado_a: user?.name }),
-        api.getPropuestas({ asignado_a: user?.name }),
+        // Admins: filtro por persona en backend (asignado_id). Usuarios comunes ya
+        // reciben solo sus tareas; el filtro por id se aplica sobre esa lista.
+        adminUser
+          ? api.getTareas(filtroResponsable ? { asignado_id: filtroResponsable } : {})
+          : fetchPropias(api.getTareas, user),
+        fetchPropias(api.getPropuestas, user),
         api.getEtapas(),
         api.getMetricasOperations(),
       ])
+      if (carga !== cargaActual.current) return
       if (rTareas.status === 'fulfilled') setTareas(rTareas.value.data)
       else throw rTareas.reason
       if (rPropuestas.status === 'fulfilled') {
@@ -875,13 +1003,19 @@ export default function OperationsModule({ user }) {
       if (rEtapas.status === 'fulfilled') setEtapas(rEtapas.value.data || [])
       if (rMetricas.status === 'fulfilled') setMetricas(rMetricas.value)
     } catch (e) {
-      setError(e?.message || 'No se pudo conectar con el servidor')
+      if (carga === cargaActual.current) setError(e?.message || 'No se pudo conectar con el servidor')
     } finally {
-      setLoading(false)
+      if (carga === cargaActual.current) setLoading(false)
     }
-  }, [adminUser, user])
+  }, [adminUser, user, filtroResponsable])
 
   useEffect(() => { cargar() }, [cargar])
+
+  useEffect(() => {
+    api.getUsuariosAsignables()
+      .then(r => setUsuariosFiltro(r.data ?? []))
+      .catch(() => {})
+  }, [])
 
   const handleCambiarEtapa = async (id, nuevaEtapaId) => {
     // Se incluyen datos de auditoría para que el backend registre el cambio en tarea_historial
@@ -909,7 +1043,7 @@ export default function OperationsModule({ user }) {
     const q = search.toLowerCase()
     if (q && !t.titulo?.toLowerCase().includes(q) && !t.descripcion?.toLowerCase().includes(q)) return false
     if (filtroPrioridad !== 'Todos' && t.prioridad !== filtroPrioridad) return false
-    if (filtroResponsable && !t.asignado_a?.toLowerCase().includes(filtroResponsable.toLowerCase())) return false
+    if (filtroResponsable && !(t.asignados ?? []).some(a => a.id === filtroResponsable)) return false
     if (filtroVencidas && !(!TIPOS_CERRADOS.includes(t.operativo_etapas?.tipo_base) && isVencida(t.fecha_limite))) return false
     return true
   })
@@ -1030,11 +1164,13 @@ export default function OperationsModule({ user }) {
                   {PRIORIDADES.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
-              <div className="shrink-0 relative" style={{ width: '176px' }}>
-                <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input value={filtroResponsable} onChange={e => setFiltroResponsable(e.target.value)}
-                  placeholder="Responsable..." className={inputCls + ' pl-9'}
-                  style={{ borderColor: 'rgba(15,110,86,0.2)' }} />
+              <div className="shrink-0 relative" style={{ width: '208px' }}>
+                <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <select value={filtroResponsable} onChange={e => setFiltroResponsable(e.target.value)}
+                  className={inputCls + ' pl-9'} style={{ borderColor: 'rgba(15,110,86,0.2)' }}>
+                  <option value="">Todos los responsables</option>
+                  {usuariosFiltro.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                </select>
               </div>
               {filtroVencidas && (
                 <button onClick={() => setFiltroVencidas(false)}
