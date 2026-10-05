@@ -55,7 +55,7 @@ export default function PruebaModal({ protocolo, onClose, onSaved }) {
       setError(
         esErrorDeRed
           ? 'No se pudo conectar con el servidor. Verificá que el backend esté activo.'
-          : (err.message || 'Error al guardar la prueba.')
+          : (err.message || 'Error al guardar el registro.')
       )
     } finally {
       setLoading(false)
@@ -65,7 +65,7 @@ export default function PruebaModal({ protocolo, onClose, onSaved }) {
   return (
     <AppModal onClose={onClose} maxWidth="max-w-xl">
       <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
-        <h2 className="font-serif font-semibold text-gray-900 text-[16px]">Nueva prueba — {protocolo.nombre}</h2>
+        <h2 className="font-serif font-semibold text-gray-900 text-[16px]">Nuevo registro — {protocolo.nombre}</h2>
         <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
           <X size={18} />
         </button>
@@ -104,7 +104,7 @@ export default function PruebaModal({ protocolo, onClose, onSaved }) {
           <label className="text-[11.5px] font-medium text-gray-500 mb-1.5 block">Resultados</label>
           <textarea value={resultadoTexto} onChange={e => setResultadoTexto(e.target.value)}
             rows={3} maxLength={800}
-            placeholder="Escribir el resultado general de la prueba"
+            placeholder="Escribir el resultado general del registro"
             className={inputCls + ' resize-none'} style={inputStyle} />
           <p className="text-right text-[11px] text-gray-400 mt-1">{resultadoTexto.length}/800</p>
         </div>
@@ -113,7 +113,7 @@ export default function PruebaModal({ protocolo, onClose, onSaved }) {
           <label className="text-[11.5px] font-medium text-gray-500 mb-1.5 block">Observaciones generales</label>
           <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)}
             rows={3} maxLength={800}
-            placeholder="Agregar un comentario general de la prueba (opcional)"
+            placeholder="Agregar un comentario general del registro (opcional)"
             className={inputCls + ' resize-none'} style={inputStyle} />
           <p className="text-right text-[11px] text-gray-400 mt-1">{observaciones.length}/800</p>
         </div>
@@ -131,7 +131,7 @@ export default function PruebaModal({ protocolo, onClose, onSaved }) {
           className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-white text-[13px] font-medium shadow-sm transition-colors disabled:opacity-60"
           style={{ background: '#0F6E56' }}>
           <Save size={15} />
-          {loading ? 'Guardando...' : 'Guardar prueba'}
+          {loading ? 'Guardando...' : 'Guardar registro'}
         </button>
       </div>
     </AppModal>

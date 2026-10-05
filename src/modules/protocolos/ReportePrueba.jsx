@@ -59,7 +59,7 @@ export default function ReportePrueba({ pruebaId, onBack }) {
           <div>
             <h2 className="font-serif text-[20px] font-semibold text-gray-900">{protocoloNombre}</h2>
             <p className="text-[13px] text-gray-500 mt-1">
-              Reporte de prueba realizada el {formatFecha(prueba.fecha)} por {prueba.realizado_por || 'responsable no especificado'}
+              Reporte del registro realizado el {formatFecha(prueba.fecha)} por {prueba.realizado_por || 'responsable no especificado'}
             </p>
           </div>
           <button onClick={() => window.print()}
@@ -88,7 +88,7 @@ export default function ReportePrueba({ pruebaId, onBack }) {
               )
             })}
             {resultados.length === 0 && (
-              <p className="text-[13px] text-gray-400 py-4">Esta prueba no tiene resultados registrados.</p>
+              <p className="text-[13px] text-gray-400 py-4">Este registro no tiene resultados cargados.</p>
             )}
           </div>
           {prueba.resultado_texto ? (

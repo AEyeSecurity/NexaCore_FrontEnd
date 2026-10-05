@@ -85,7 +85,7 @@ export default function ProtocolosList({ onOpenProtocolo }) {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Protocolos activos" value={metrics?.totalProtocolosActivos ?? '—'} icon={ClipboardList} color="#6A52D6" />
-        <StatCard label="Pruebas registradas" value={metrics?.totalPruebas ?? '—'} icon={Clock} color="#E08A2C" />
+        <StatCard label="Registros" value={metrics?.totalPruebas ?? '—'} icon={Clock} color="#E08A2C" />
         <StatCard label="Sin incumplimientos" value={metrics?.pruebasSinIncumplimientos ?? '—'} icon={CheckCircle2} color="#1D9E75" />
         <StatCard label="Con incumplimientos" value={metrics?.pruebasConIncumplimientos ?? '—'} icon={AlertTriangle} color="#E24B4A" />
       </div>

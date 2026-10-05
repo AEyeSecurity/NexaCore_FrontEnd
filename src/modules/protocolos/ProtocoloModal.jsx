@@ -103,7 +103,7 @@ export default function ProtocoloModal({ protocolo, onClose, onSaved }) {
             className={inputCls + ' resize-none'} style={inputStyle} />
           {isEdit && (
             <p className="text-[11.5px] text-gray-400 mt-1.5">
-              Al guardar, este checklist reemplaza al anterior y aplicará a las próximas pruebas.
+              Al guardar, este checklist reemplaza al anterior y aplicará a los próximos registros.
             </p>
           )}
         </div>

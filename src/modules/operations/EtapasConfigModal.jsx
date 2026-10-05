@@ -7,10 +7,12 @@ import { api } from '../../lib/api'
 // se hardcodea acá con etiquetas legibles, tal cual lo pide el asistente
 // de creación de etapas.
 const TIPO_BASE_OPTIONS = [
-  { value: 'pendiente',  label: 'Abierta · Pendiente'  },
-  { value: 'en_curso',   label: 'Abierta · En curso'   },
-  { value: 'completada', label: 'Cerrada · Completada' },
-  { value: 'cancelada',  label: 'Cerrada · Cancelada'  },
+  { value: 'pendiente',           label: 'Abierta · Pendiente'   },
+  { value: 'en_curso',            label: 'Abierta · En curso'    },
+  { value: 'en_revision_abierta', label: 'Abierta · En Revisión' },
+  { value: 'en_revision_cerrada', label: 'Cerrada · En Revisión' },
+  { value: 'completada',          label: 'Cerrada · Completada'  },
+  { value: 'cancelada',           label: 'Cerrada · Cancelada'   },
 ]
 
 const DEFAULT_COLOR = '#0F6E56'

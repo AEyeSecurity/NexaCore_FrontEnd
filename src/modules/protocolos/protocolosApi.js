@@ -7,6 +7,7 @@ export const protocolosApi = {
   crear:           (body)        => api.crearProtocolo(body),
   editar:          (id, body)    => api.editarProtocolo(id, body),
   guardarItems:    (id, items)   => api.guardarItemsProtocolo(id, items),
+  eliminar:        (id)          => api.eliminarProtocolo(id),
   registrarPrueba: (id, body)    => api.registrarPruebaProtocolo(id, body),
   listarPruebas:   (id)          => api.getPruebasProtocolo(id),
   obtenerPrueba:   (pruebaId)    => api.getPrueba(pruebaId),
