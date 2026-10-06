@@ -42,6 +42,7 @@ export default function PruebaModal({ protocolo, onClose, onSaved }) {
         item_id: it.id,
         texto: it.texto,
         estado: respuestas[it.id].estado,
+        tildado: !!respuestas[it.id]?.tildado,
       }))
       await protocolosApi.registrarPrueba(protocolo.id, {
         fecha,
@@ -99,6 +100,28 @@ export default function PruebaModal({ protocolo, onClose, onSaved }) {
             <p className="text-[13px] text-gray-400">Este protocolo no tiene ítems configurados en su checklist.</p>
           )}
         </div>
+
+        {items.length > 0 && (
+          <div>
+            <label className="text-[11.5px] font-medium text-gray-500 block">Acciones realizadas</label>
+            <p className="text-[11.5px] text-gray-400 mb-2">
+              {items.filter(it => respuestas[it.id]?.tildado).length} de {items.length} tildadas
+            </p>
+            <div className="border rounded-xl divide-y" style={{ borderColor: 'rgba(15,110,86,0.15)' }}>
+              {items.map(it => {
+                const tildado = !!respuestas[it.id]?.tildado
+                return (
+                  <label key={it.id} className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-gray-700 cursor-pointer">
+                    <input type="checkbox" checked={tildado}
+                      onChange={e => setRespuesta(it.id, { tildado: e.target.checked })}
+                      className="w-4 h-4 flex-shrink-0 cursor-pointer" style={{ accentColor: '#0F6E56' }} />
+                    <span className={tildado ? 'text-gray-500 line-through' : ''}>{it.texto}</span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         <div>
           <label className="text-[11.5px] font-medium text-gray-500 mb-1.5 block">Resultados</label>

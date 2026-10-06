@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Printer, RefreshCw, CheckCircle2, XCircle, MinusCircle } from 'lucide-react'
+import { ArrowLeft, Printer, RefreshCw, CheckCircle2, XCircle, MinusCircle, Check } from 'lucide-react'
 import { protocolosApi } from './protocolosApi'
 import { ESTADO_ITEM_STYLE } from './constants'
 
@@ -77,7 +77,14 @@ export default function ReportePrueba({ pruebaId, onBack }) {
               return (
                 <div key={i} className="flex items-start justify-between gap-4 py-3">
                   <div>
-                    <p className="text-[13.5px] font-medium text-gray-800">{i + 1}. {r.texto}</p>
+                    <p className="text-[13.5px] font-medium text-gray-800 flex items-center gap-1.5">
+                      {i + 1}. {r.texto}
+                      {r.tildado && (
+                        <span title="Acción tildada como realizada" className="inline-flex items-center justify-center w-4 h-4 rounded-full flex-shrink-0" style={{ background: '#0F6E56' }}>
+                          <Check size={10} strokeWidth={3} className="text-white" />
+                        </span>
+                      )}
+                    </p>
                     {r.nota && <p className="text-[12px] text-gray-400 mt-0.5">📝 {r.nota}</p>}
                   </div>
                   <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11.5px] font-semibold flex-shrink-0"
