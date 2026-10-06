@@ -8,7 +8,7 @@ import {
 
 // Flecha de tendencia a partir de `tendencia` del backend (no se recalcula).
 // El color indica si el movimiento es favorable según el sentido del indicador.
-function Tendencia({ tendencia, sentido, unidad }) {
+export function Tendencia({ tendencia, sentido, unidad }) {
   if (!tendencia) return null
   const { direccion, variacion } = tendencia
   const Icon = direccion === 'SUBE' ? TrendingUp : direccion === 'BAJA' ? TrendingDown : Minus

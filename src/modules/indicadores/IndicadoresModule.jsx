@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, RefreshCw, AlertCircle, Activity, CheckCircle2, AlertTriangle, XCircle, Gauge } from 'lucide-react'
 import { api } from '../../lib/api'
-import IndicadorCard from './IndicadorCard'
+import IndicadorRow from './IndicadorRow'
 import IndicadorDetailDrawer from './IndicadorDetailDrawer'
 import IndicadorWizard from './IndicadorWizard'
 import { useHistoricos, invalidateIndicador } from './indicadoresData'
@@ -180,9 +180,9 @@ export default function IndicadoresModule() {
               No hay indicadores en esta perspectiva.
             </div>
           ) : (
-            <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
+            <div className="flex flex-col gap-3">
               {visibles.map(ind => (
-                <IndicadorCard
+                <IndicadorRow
                   key={ind.id}
                   indicador={ind}
                   historico={historicos[ind.id]}

@@ -1,7 +1,7 @@
 import {
   Briefcase, Plus, CheckCircle, Clock, AlertCircle, XCircle,
-  Search, RefreshCw, Trash2, X, User, Calendar, Edit2, AlertTriangle,
-  Send, ThumbsUp, ThumbsDown, Inbox, History, Settings2,
+  Search, RefreshCw, Trash2, X, User, UserRound, Calendar, Edit2, AlertTriangle,
+  Send, ThumbsUp, ThumbsDown, Inbox, History, Settings2, ChevronDown,
 } from 'lucide-react'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
@@ -120,7 +120,7 @@ function ResponsablesLinea({ tarea, prefijo }) {
   return (
     <div className="flex items-center gap-1.5 text-[11.5px] text-gray-500 min-w-0"
       title={historico ? `Responsable histórico (sin usuario vinculado): ${nombres[0]}` : nombres.join(', ')}>
-      <User size={11} className="shrink-0" />
+      <UserRound size={12} className="shrink-0" />
       <span className="truncate">
         {prefijo && <>{prefijo} </>}
         <span className={prefijo ? 'font-medium text-gray-700' : undefined}>{fmtResponsables(nombres)}</span>
@@ -1164,13 +1164,14 @@ export default function OperationsModule({ user }) {
                   {PRIORIDADES.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
-              <div className="shrink-0 relative" style={{ width: '208px' }}>
+              <div className="shrink-0 relative" style={{ width: '248px' }}>
                 <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 <select value={filtroResponsable} onChange={e => setFiltroResponsable(e.target.value)}
-                  className={inputCls + ' pl-9'} style={{ borderColor: 'rgba(15,110,86,0.2)' }}>
+                  className={inputCls + ' appearance-none pl-8 pr-8'} style={{ borderColor: 'rgba(15,110,86,0.2)' }}>
                   <option value="">Todos los responsables</option>
                   {usuariosFiltro.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
                 </select>
+                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
               {filtroVencidas && (
                 <button onClick={() => setFiltroVencidas(false)}
