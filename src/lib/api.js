@@ -281,7 +281,12 @@ export const api = {
   // DELETE /api/protocolos/:id (solo hierarchyLevel HIGH) → { message, id, nombre, registrosEliminados }
   eliminarProtocolo: (id) => request(`/api/protocolos/${id}`, { method: 'DELETE' }),
 
-  registrarPruebaProtocolo: (id, body) => request(`/api/protocolos/${id}/pruebas`, { method: 'POST', body: JSON.stringify(body) }),
+  // Registros: { fecha, resultados[], resultado_texto, observaciones, action_items: [{ texto }] }
+  // PUT reemplaza completas las listas `resultados` y `action_items` si se envían.
+  // PUT/DELETE responden 404 si el registro no existe o no pertenece al protocolo.
+  crearRegistroProtocolo:    (id, body)           => request(`/api/protocolos/${id}/pruebas`,             { method: 'POST',   body: JSON.stringify(body) }),
+  editarRegistroProtocolo:   (id, pruebaId, body) => request(`/api/protocolos/${id}/pruebas/${pruebaId}`, { method: 'PUT',    body: JSON.stringify(body) }),
+  eliminarRegistroProtocolo: (id, pruebaId)       => request(`/api/protocolos/${id}/pruebas/${pruebaId}`, { method: 'DELETE' }),
   getPruebasProtocolo:      (id)       => request(`/api/protocolos/${id}/pruebas`),
   getPrueba: (pruebaId) => request(`/api/protocolos/pruebas/${pruebaId}`),
 

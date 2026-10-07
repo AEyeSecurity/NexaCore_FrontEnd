@@ -2,13 +2,7 @@ import { useState, useEffect } from 'react'
 import { ArrowLeft, Printer, RefreshCw, CheckCircle2, XCircle, MinusCircle, Check } from 'lucide-react'
 import { protocolosApi } from './protocolosApi'
 import { ESTADO_ITEM_STYLE } from './constants'
-
-function formatFecha(fechaStr) {
-  if (!fechaStr) return '—'
-  const d = new Date(fechaStr)
-  if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
+import { formatFecha } from './fechas'
 
 const ESTADO_LABEL = { ok: 'Cumple', fail: 'No cumple', na: 'N/A' }
 const ESTADO_ICON = { ok: CheckCircle2, fail: XCircle, na: MinusCircle }
@@ -37,6 +31,7 @@ export default function ReportePrueba({ pruebaId, onBack }) {
   if (!prueba) return null
 
   const resultados = Array.isArray(prueba.resultados) ? prueba.resultados : []
+  const actionItems = Array.isArray(prueba.action_items) ? prueba.action_items : []
   const protocoloNombre = prueba.protocolos?.nombre ?? 'Protocolo'
 
   return (
@@ -110,6 +105,14 @@ export default function ReportePrueba({ pruebaId, onBack }) {
               <p className="whitespace-pre-wrap">{prueba.observaciones}</p>
             </div>
           ) : null}
+          {actionItems.length > 0 && (
+            <div className="mt-4 pt-4 border-t text-[13px] text-gray-600" style={{ borderColor: 'rgba(15,110,86,0.08)' }}>
+              <p className="font-semibold text-gray-800 mb-1">Action Items</p>
+              <ul className="list-disc pl-5 space-y-0.5">
+                {actionItems.map((a, i) => <li key={a.id ?? i} className="break-words">{a.texto}</li>)}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
     </div>
