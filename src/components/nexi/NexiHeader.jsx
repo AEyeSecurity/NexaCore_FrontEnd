@@ -1,12 +1,11 @@
 import { X, History, SquarePen } from 'lucide-react'
 import avatarNexi from '../../../resources/avatarNexi.png'
 import { useNexi } from '../../context/NexiContext'
-import { getNexiModuleLabel } from '../../lib/nexiModules'
 
 const iconButton = 'p-1.5 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors cursor-pointer flex-shrink-0'
 
 export default function NexiHeader() {
-  const { close, selectedModule, isHistoryOpen, openHistory, closeHistory, newConversation } = useNexi()
+  const { close, isHistoryOpen, openHistory, closeHistory, newConversation } = useNexi()
 
   return (
     <div
@@ -19,13 +18,7 @@ export default function NexiHeader() {
           alt="Nexi"
           className="w-9 h-9 rounded-full object-cover flex-shrink-0 border border-white/20"
         />
-        <div className="min-w-0">
-          <p className="text-[14px] font-semibold text-white leading-tight">Nexi</p>
-          <p className="text-[11px] text-white/55 truncate flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#5DCAA5] flex-shrink-0" />
-            Contexto: {getNexiModuleLabel(selectedModule)}
-          </p>
-        </div>
+        <p className="text-[14px] font-semibold text-white leading-tight">Nexi</p>
       </div>
       <div className="flex items-center gap-0.5">
         <button

@@ -1,6 +1,5 @@
 import { useNexi } from '../../context/NexiContext'
 import NexiHeader from './NexiHeader'
-import NexiModuleSelector from './NexiModuleSelector'
 import NexiMessageList from './NexiMessageList'
 import NexiMessageInput from './NexiMessageInput'
 import NexiConversationList from './NexiConversationList'
@@ -17,7 +16,6 @@ export default function NexiChatPanel() {
       {isHistoryOpen && <NexiConversationList />}
       {/* El chat queda montado detrás del historial: conserva borrador y scroll. */}
       <div className={`flex-1 flex-col min-h-0 ${isHistoryOpen ? 'hidden' : 'flex'}`}>
-        <NexiModuleSelector />
         <NexiMessageList />
         <NexiMessageInput />
       </div>

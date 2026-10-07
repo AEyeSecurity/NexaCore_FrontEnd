@@ -53,6 +53,19 @@ async function requestMultipart(path, method, formData) {
   return data
 }
 
+// Descarga autenticada de archivos (el token va en el header, nunca en la URL).
+async function requestBlob(path) {
+  const authHeaders = await getAuthHeaders()
+  const res = await fetch(`${API_URL}${path}`, { headers: authHeaders })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    const err = new Error(data.error || 'Error en la solicitud')
+    err.status = res.status
+    throw err
+  }
+  return res.blob()
+}
+
 export const api = {
   // ── Dashboard personalizable ──────────────────────
   getDashboardConfig:  () => request('/api/dashboard/config'),
@@ -292,7 +305,9 @@ export const api = {
 
   // ── Nexi (asistente, solo lectura) ───────────────
   // POST   /api/nexi/chat                        ← { conversationId?, mensaje, contextoModulo? }
-  //                                               → { conversationId, titulo, mensaje: { id, rol, contenido, created_at }, herramientasUsadas }
+  //                                               → { conversationId, titulo, mensaje: { id, rol, contenido, created_at }, herramientasUsadas,
+  //                                                   reportes?: [{ id, titulo, formato, descargaUrl }] }
+  // GET    {descargaUrl} (/api/nexi/reportes/:id/descarga) → PDF binario
   // GET    /api/nexi/conversaciones              → { data: [{ id, titulo, created_at, updated_at }], total }
   // POST   /api/nexi/conversaciones              ← { titulo? } → { id, titulo, created_at, updated_at }
   // GET    /api/nexi/conversaciones/:id/mensajes → { conversacion, data: [{ id, rol, contenido, created_at }] }
@@ -311,4 +326,5 @@ export const api = {
   createNexiConversation: (titulo) => request('/api/nexi/conversaciones', { method: 'POST', body: JSON.stringify(titulo ? { titulo } : {}) }),
   getNexiMessages:        (id)     => request(`/api/nexi/conversaciones/${id}/mensajes`),
   deleteNexiConversation: (id)     => request(`/api/nexi/conversaciones/${id}`, { method: 'DELETE' }),
+  downloadNexiReporte:    (descargaUrl) => requestBlob(descargaUrl),
 }
