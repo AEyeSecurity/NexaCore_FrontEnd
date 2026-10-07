@@ -1,11 +1,12 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
-import { AlertCircle, X } from 'lucide-react'
+import { AlertCircle, X, FileText, Download, Loader2 } from 'lucide-react'
 import avatarNexi from '../../../resources/avatarNexi.png'
 import { useNexi } from '../../context/NexiContext'
-import { NEXI_MODULES, NEXI_GENERAL_SUGGESTIONS } from '../../lib/nexiModules'
+import { NEXI_GENERAL_SUGGESTIONS } from '../../lib/nexiModules'
 
-const bubbleBase = 'max-w-[85%] rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-[13px] leading-snug break-words'
+const bubbleShape = 'rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-[13px] leading-snug break-words'
+const bubbleBase = `max-w-[85%] ${bubbleShape}`
 const assistantBubble = `${bubbleBase} whitespace-pre-wrap`
 
 // Markdown básico para respuestas de Nexi. Solo estos elementos; el resto
@@ -25,11 +26,57 @@ const markdownComponents = {
   code:   ({ node, ...props }) => <code className="px-1 py-px rounded text-[12px] font-mono bg-[#0F6E56]/10" {...props} />,
 }
 
+function AssistantMarkdown({ children }) {
+  return (
+    <Markdown
+      allowedElements={MARKDOWN_ELEMENTS}
+      unwrapDisallowed
+      skipHtml
+      components={markdownComponents}
+    >
+      {children}
+    </Markdown>
+  )
+}
+
 function AssistantRow({ children }) {
   return (
     <div className="self-start flex items-end gap-2 max-w-full">
       <img src={avatarNexi} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
       {children}
+    </div>
+  )
+}
+
+function ReportCard({ reporte }) {
+  const { downloadReport } = useNexi()
+  const [isDownloading, setIsDownloading] = useState(false)
+
+  const handleDownload = async () => {
+    setIsDownloading(true)
+    await downloadReport(reporte)
+    setIsDownloading(false)
+  }
+
+  return (
+    <div className="rounded-xl border bg-white px-3 py-2.5 flex items-center gap-2.5" style={{ borderColor: 'rgba(15,110,86,0.2)' }}>
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#E1F5EE' }}>
+        <FileText size={16} style={{ color: '#0F6E56' }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[12.5px] font-semibold leading-snug break-words" style={{ color: '#233F38' }}>{reporte.titulo}</p>
+        <p className="text-[10.5px] font-semibold uppercase tracking-wide mt-0.5" style={{ color: '#4B5A55' }}>{reporte.formato}</p>
+      </div>
+      <button
+        onClick={handleDownload}
+        disabled={isDownloading}
+        aria-label={`Descargar ${reporte.titulo}`}
+        className="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium text-white transition-opacity cursor-pointer hover:opacity-90 disabled:opacity-60 disabled:cursor-wait"
+        style={{ background: '#0F6E56' }}
+      >
+        {isDownloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+        {isDownloading ? 'Descargando…' : 'Descargar'}
+      </button>
     </div>
   )
 }
@@ -57,11 +104,9 @@ function ThinkingIndicator() {
   )
 }
 
-function Suggestions({ selectedModule, nexiModules, onPick, disabled }) {
+function Suggestions({ nexiModules, onPick, disabled }) {
   const allowedIds = nexiModules.map(m => m.id)
-  const suggestions = selectedModule
-    ? NEXI_MODULES.find(m => m.id === selectedModule)?.suggestions ?? []
-    : NEXI_GENERAL_SUGGESTIONS.filter(s => allowedIds.includes(s.module)).map(s => s.text)
+  const suggestions = NEXI_GENERAL_SUGGESTIONS.filter(s => allowedIds.includes(s.module)).map(s => s.text)
 
   if (suggestions.length === 0) return null
 
@@ -85,7 +130,7 @@ function Suggestions({ selectedModule, nexiModules, onPick, disabled }) {
 export default function NexiMessageList() {
   const {
     messages, user, isSending, isLoadingMessages, error, dismissError,
-    selectedModule, nexiModules, sendMessage,
+    nexiModules, sendMessage,
   } = useNexi()
   const scrollRef = useRef(null)
 
@@ -96,7 +141,7 @@ export default function NexiMessageList() {
     if (el) el.scrollTop = el.scrollHeight
   }, [messages.length, isSending, isLoadingMessages, error])
 
-  const greeting = `Hola${user?.name ? `, ${user.name}` : ''} 👋 Soy Nexi. Puedo ayudarte con la información disponible en los módulos a los que tenés acceso. Haceme una pregunta o seleccioná un módulo si querés enfocar la consulta.`
+  const greeting = `Hola${user?.name ? `, ${user.name}` : ''} 👋 Soy Nexi. Puedo ayudarte con la información disponible en los módulos a los que tenés acceso. Haceme una pregunta.`
 
   const isEmpty = messages.length === 0 && !isLoadingMessages
 
@@ -110,7 +155,6 @@ export default function NexiMessageList() {
             </div>
           </AssistantRow>
           <Suggestions
-            selectedModule={selectedModule}
             nexiModules={nexiModules}
             onPick={sendMessage}
             disabled={isSending}
@@ -137,16 +181,18 @@ export default function NexiMessageList() {
           </div>
         ) : (
           <AssistantRow key={msg.id}>
-            <div className={bubbleBase} style={{ background: '#F1F5F3', color: '#233F38' }}>
-              <Markdown
-                allowedElements={MARKDOWN_ELEMENTS}
-                unwrapDisallowed
-                skipHtml
-                components={markdownComponents}
-              >
-                {msg.contenido}
-              </Markdown>
-            </div>
+            {msg.reportes?.length > 0 ? (
+              <div className="max-w-[85%] min-w-0 flex flex-col gap-2">
+                <div className={bubbleShape} style={{ background: '#F1F5F3', color: '#233F38' }}>
+                  <AssistantMarkdown>{msg.contenido}</AssistantMarkdown>
+                </div>
+                {msg.reportes.map(r => <ReportCard key={r.id} reporte={r} />)}
+              </div>
+            ) : (
+              <div className={bubbleBase} style={{ background: '#F1F5F3', color: '#233F38' }}>
+                <AssistantMarkdown>{msg.contenido}</AssistantMarkdown>
+              </div>
+            )}
           </AssistantRow>
         )
       ))}
