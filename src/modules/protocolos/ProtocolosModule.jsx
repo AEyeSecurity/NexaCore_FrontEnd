@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, AlertCircle } from 'lucide-react'
 import ProtocolosList from './ProtocolosList'
 import ProtocolosDetail from './ProtocolosDetail'
 import ReportePrueba from './ReportePrueba'
@@ -11,8 +11,8 @@ export default function ProtocolosModule({ user }) {
 
   const [toast, setToast] = useState(null)
   const toastTimer = useRef(null)
-  const showToast = useCallback((message) => {
-    setToast(message)
+  const showToast = useCallback((message, tone = 'success') => {
+    setToast({ message, tone })
     clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToast(null), 2600)
   }, [])
@@ -45,6 +45,7 @@ export default function ProtocolosModule({ user }) {
           onBack={backToList}
           onOpenPrueba={openReport}
           onDeleted={handleDeleted}
+          onToast={showToast}
         />
       )}
       {view === 'report' && selectedPruebaId && (
@@ -59,8 +60,10 @@ export default function ProtocolosModule({ user }) {
           className="fixed bottom-6 right-6 flex items-center gap-2 text-white text-[13px] font-medium px-4 py-3 rounded-xl shadow-lg z-[60]"
           style={{ background: '#04342C' }}
         >
-          <CheckCircle2 size={15} style={{ color: '#5DCAA5' }} />
-          {toast}
+          {toast.tone === 'error'
+            ? <AlertCircle size={15} style={{ color: '#FCA5A5' }} />
+            : <CheckCircle2 size={15} style={{ color: '#5DCAA5' }} />}
+          {toast.message}
         </div>
       )}
     </div>
