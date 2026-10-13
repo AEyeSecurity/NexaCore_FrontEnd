@@ -14,14 +14,16 @@ const PERIODO_VISTA = '12m'
 
 function StatCard({ label, value, icon: Icon, color, loading }) {
   return (
-    <div className="bg-white rounded-xl p-5 border shadow-sm" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
-      <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: color + '18' }}>
-        <Icon size={17} style={{ color }} />
+    <div className="bg-white rounded-xl p-3.5 border shadow-sm" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
+      <p className="text-[12px] text-gray-500 mb-1.5">{label}</p>
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: color + '18' }}>
+          <Icon size={15} style={{ color }} />
+        </div>
+        <p className="text-[19px] font-semibold text-gray-900">
+          {loading ? <span className="text-gray-300">···</span> : value}
+        </p>
       </div>
-      <p className="text-[12.5px] text-gray-500">{label}</p>
-      <p className="text-[22px] font-semibold text-gray-900">
-        {loading ? <span className="text-gray-300">···</span> : value}
-      </p>
     </div>
   )
 }
@@ -180,7 +182,7 @@ export default function IndicadoresModule() {
               No hay indicadores en esta perspectiva.
             </div>
           ) : (
-            <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {visibles.map(ind => (
                 <IndicadorRow
                   key={ind.id}

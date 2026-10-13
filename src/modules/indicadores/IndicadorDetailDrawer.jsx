@@ -4,6 +4,7 @@ import AppModal from '../../components/AppModal'
 import { api } from '../../lib/api'
 import SideDrawer from './SideDrawer'
 import IndicadorViz, { EstadoBadge, periodoLargo, motivoSinDatos } from './IndicadorViz'
+import { Tendencia } from './IndicadorCard'
 import { useVariables } from './indicadoresData'
 import { formulaLegible } from './formula'
 import {
@@ -129,7 +130,10 @@ export default function IndicadorDetailDrawer({ indicador, historico, onClose, o
                 <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Valor actual</p>
                 {ultimo ? (
                   <>
-                    <p className="text-[28px] font-bold text-gray-900 leading-tight">{formatValor(ultimo.valor, unidad)}</p>
+                    <div className="flex items-end gap-2 flex-wrap">
+                      <p className="text-[28px] font-bold text-gray-900 leading-tight">{formatValor(ultimo.valor, unidad)}</p>
+                      <Tendencia tendencia={data?.tendencia} sentido={indicador.sentido} unidad={unidad} />
+                    </div>
                     <p className="text-[11.5px] text-gray-400">{periodoLargo(ultimo.periodo)}</p>
                   </>
                 ) : (
