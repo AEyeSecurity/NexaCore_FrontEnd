@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   LayoutDashboard, TrendingUp, Briefcase, Users,
-  BarChart2, Settings, Menu, X, ChevronLeft, ChevronRight,
+  BarChart2, Menu, X, ChevronLeft, ChevronRight,
   Zap, UserCog, LogOut, Home, Building2, ClipboardCheck, Gauge,
 } from 'lucide-react'
 import { ROLE_PAGES, useAllowedModules } from '../lib/permissions'
@@ -25,7 +25,6 @@ const NAV = [
     { id: 'reportes',       label: 'Reportes',      icon: BarChart2  },
     { id: 'usuarios',       label: 'Usuarios',      icon: UserCog    },
     { id: 'organizacion',   label: 'Organización',  icon: Building2  },
-    { id: 'settings',       label: 'Configuración', icon: Settings   },
   ]},
 ]
 
