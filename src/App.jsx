@@ -14,19 +14,15 @@ import ProtocolosModule from './modules/protocolos/ProtocolosModule'
 import Usuarios from './components/Usuarios'
 import OrganizationModule from './modules/organization/OrganizationModule'
 import IndicadoresModule from './modules/indicadores/IndicadoresModule'
+import ReportesModule from './modules/reportes/ReportesModule'
 import AuthCallback from './components/AuthCallback'
 import { getAllowedPages } from './lib/permissions'
 
-function ComingSoon({ title }) {
-  return (
-    <div className="fade-in flex items-center justify-center h-64">
-      <div className="text-center">
-        <p className="font-sans text-[20px] font-semibold text-gray-700">{title}</p>
-        <p className="text-[13.5px] text-gray-400 mt-2">Módulo en construcción</p>
-      </div>
-    </div>
-  )
-}
+// Páginas que renderiza Layout. Cualquier otro valor de `page` vuelve a Inicio.
+const LAYOUT_PAGES = new Set([
+  'dashboard', 'indicadores', 'finance', 'operations', 'crm',
+  'protocolos', 'reportes', 'usuarios', 'organizacion',
+])
 
 export default function App() {
   const [user, setUser] = useState(null)
@@ -125,7 +121,7 @@ export default function App() {
     return <Login onLogin={handleLogin} />
   }
 
-  if (page === 'home') {
+  if (page === 'home' || !LAYOUT_PAGES.has(page)) {
     return <Home user={user} onNavigate={navigate} onLogout={handleLogout} />
   }
 
@@ -144,10 +140,8 @@ export default function App() {
             </div>
       })()}
       {page === 'protocolos'    && <ProtocolosModule user={user} />}
-      {page === 'reportes'      && <ComingSoon title="Reportes" />}
+      {page === 'reportes'      && <ReportesModule />}
       {page === 'usuarios'      && <Usuarios user={user} />}
-      {page === 'organizacion'  && <OrganizationModule user={user} />}
-      {page === 'settings'      && <ComingSoon title="Configuración" />}
-    </Layout>
+      {page === 'organizacion'  && <OrganizationModule user={user} />}    </Layout>
   )
 }

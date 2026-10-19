@@ -307,6 +307,10 @@ export const api = {
   // POST   /api/nexi/chat                        ← { conversationId?, mensaje, contextoModulo? }
   //                                               → { conversationId, titulo, mensaje: { id, rol, contenido, created_at }, herramientasUsadas,
   //                                                   reportes?: [{ id, titulo, formato, descargaUrl }] }
+  // GET    /api/nexi/reportes                    → { data: [{ id, tipo, titulo, secciones, secciones_excluidas: [{ seccion, titulo, motivo }],
+  //                                                   periodo_etiqueta, periodo_desde, periodo_hasta (exclusivo), formato, estado,
+  //                                                   archivo_bytes, created_at, descargaUrl (null si estado ≠ GENERADO) }], total }
+  //                                                 Solo los propios, más recientes primero, máx. 50. 403 sin lectura en Reportes.
   // GET    {descargaUrl} (/api/nexi/reportes/:id/descarga) → PDF binario
   // GET    /api/nexi/conversaciones              → { data: [{ id, titulo, created_at, updated_at }], total }
   // POST   /api/nexi/conversaciones              ← { titulo? } → { id, titulo, created_at, updated_at }
@@ -326,5 +330,6 @@ export const api = {
   createNexiConversation: (titulo) => request('/api/nexi/conversaciones', { method: 'POST', body: JSON.stringify(titulo ? { titulo } : {}) }),
   getNexiMessages:        (id)     => request(`/api/nexi/conversaciones/${id}/mensajes`),
   deleteNexiConversation: (id)     => request(`/api/nexi/conversaciones/${id}`, { method: 'DELETE' }),
+  listarReportesNexi:     ()       => request('/api/nexi/reportes'),
   downloadNexiReporte:    (descargaUrl) => requestBlob(descargaUrl),
 }
