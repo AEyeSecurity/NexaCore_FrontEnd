@@ -185,6 +185,10 @@ export const api = {
   eliminarSuscripcion:(id)       => request(`/api/finance/suscripciones/${id}`, { method: 'DELETE' }),
 
   // ── Operations ───────────────────────────────────
+  getTableros:  ()         => request('/api/operations/tableros'),
+  crearTablero: (body)     => request('/api/operations/tableros',      { method: 'POST',  body: JSON.stringify(body) }),
+  editarTablero:(id, body) => request(`/api/operations/tableros/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
   getEtapas:    ()         => request('/api/operations/etapas'),
   crearEtapa:   (body)     => request('/api/operations/etapas',      { method: 'POST',  body: JSON.stringify(body) }),
   editarEtapa:  (id, body) => request(`/api/operations/etapas/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),

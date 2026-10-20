@@ -46,7 +46,7 @@ export default function Layout({ children, page, onNavigate, user, onLogout }) {
   const allowedPages = ROLE_PAGES[userRole] ?? null
 
   // Ítems con `module`: visibles según la Matriz de permisos real.
-  const allowedModules = useAllowedModules(user?.email)
+  const [allowedModules] = useAllowedModules(user?.email)
 
   const isItemVisible = (item) => item.module
     ? allowedModules.includes(item.module)
