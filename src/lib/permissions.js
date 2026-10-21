@@ -44,8 +44,23 @@ function fetchAllowedModulesOnce(userKey) {
   cacheKey = userKey
   cachedPromise = api.getDashboardConfig()
     .then(res => res?.allowedModules || [])
+    .catch(err => {
+      // No cachear un fallo transitorio (ej. una carrera justo al loguearse):
+      // se limpia para que el próximo montaje reintente en vez de quedar
+      // "sin módulos" para el resto de la sesión.
+      if (cacheKey === userKey) { cacheKey = undefined; cachedPromise = null }
+      throw err
+    })
     .catch(() => [])
   return cachedPromise
+}
+
+// Dispara el pedido lo antes posible (ej. apenas se conoce el usuario
+// logueado, en App.jsx) en vez de esperar a que Inicio/sidebar se monten —
+// así corre en paralelo con lo demás que se pide en ese momento (perfil,
+// etc.) en lugar de arrancar recién cuando el componente aparece.
+export function prefetchAllowedModules(userKey) {
+  if (userKey) fetchAllowedModulesOnce(userKey)
 }
 
 // Devuelve [allowedModules, loading]: `loading` permite a quien lo use
