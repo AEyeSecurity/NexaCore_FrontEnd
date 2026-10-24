@@ -16,7 +16,7 @@ import OrganizationModule from './modules/organization/OrganizationModule'
 import IndicadoresModule from './modules/indicadores/IndicadoresModule'
 import ReportesModule from './modules/reportes/ReportesModule'
 import AuthCallback from './components/AuthCallback'
-import { getAllowedPages } from './lib/permissions'
+import { getAllowedPages, prefetchAllowedModules } from './lib/permissions'
 
 // Páginas que renderiza Layout. Cualquier otro valor de `page` vuelve a Inicio.
 const LAYOUT_PAGES = new Set([
@@ -71,6 +71,8 @@ export default function App() {
   const userEmail = user?.email
   useEffect(() => {
     if (!userEmail) return
+    // En paralelo con el perfil: así no espera a que Inicio/sidebar se monten.
+    prefetchAllowedModules(userEmail)
     let alive = true
     api.getPerfil()
       .then(perfil => {

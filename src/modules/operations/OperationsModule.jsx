@@ -1,12 +1,14 @@
 import {
   Briefcase, Plus, CheckCircle, Clock, AlertCircle, XCircle,
-  Search, RefreshCw, Trash2, X, User, UserRound, Calendar, Edit2, AlertTriangle,
+  Search, RefreshCw, Trash2, X, User, UserRound, Users, Calendar, Edit2, AlertTriangle,
   Send, ThumbsUp, ThumbsDown, Inbox, History, Settings2, ChevronDown,
 } from 'lucide-react'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../../lib/api'
 import EtapasConfigModal from './EtapasConfigModal'
+import TableroModal from './TableroModal'
+import VerMiembrosModal from './VerMiembrosModal'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 // Las etapas del tablero (columnas) son 100% personalizables y vienen de
@@ -16,6 +18,13 @@ const TIPOS_CERRADOS = ['completada', 'cancelada', 'en_revision_cerrada']
 
 const PRIORIDADES  = ['Alta', 'Media', 'Baja']
 const ROLES_ADMIN  = ['Superadmin', 'Dirección']
+
+// Varios tableros con miembros: cada uno tiene sus propias tareas y su
+// propia gente. Dirección/Superadmin ven y gestionan todos; el resto solo
+// ve los tableros donde es miembro. Las etapas (columnas del Kanban) siguen
+// siendo globales — no dependen del tablero.
+const TABLERO_STORAGE_KEY = 'nx_operativo_tablero_id'
+const AVATAR_COLORS = ['#0F6E56', '#6366F1', '#DB2777', '#D97706', '#0EA5E9', '#9333EA']
 
 const PRIORIDAD_CFG = {
   Alta:  { background: '#FEE2E2', color: '#991B1B' },
@@ -99,11 +108,11 @@ function esResponsable(tarea, user) {
 // que solo se conservan las que no tienen `asignados` (no se mezclan homónimos).
 // No se envían ambos parámetros juntos: el backend los combina como OR.
 // Sin user.id (perfil aún no cargado o fallido) se usa el filtro legacy por nombre.
-async function fetchPropias(fetcher, user) {
-  if (!user?.id) return fetcher({ asignado_a: user?.name })
+async function fetchPropias(fetcher, user, extra = {}) {
+  if (!user?.id) return fetcher({ ...extra, asignado_a: user?.name })
   const [porId, porNombre] = await Promise.all([
-    fetcher({ asignado_id: user.id }),
-    user.name ? fetcher({ asignado_a: user.name }).catch(() => ({ data: [] })) : { data: [] },
+    fetcher({ ...extra, asignado_id: user.id }),
+    user.name ? fetcher({ ...extra, asignado_a: user.name }).catch(() => ({ data: [] })) : { data: [] },
   ])
   const vistos = new Set((porId.data ?? []).map(t => t.id))
   const historicas = (porNombre.data ?? []).filter(t =>
@@ -418,7 +427,10 @@ function TareaCard({ tarea, etapas, onEditar, onEliminar, onCambiarEtapa, onHist
 }
 
 // ── ModalTarea ────────────────────────────────────────────────────────────────
-function ModalTarea({ tarea, etapas, onClose, onSaved, user }) {
+// `miembros`: gente del tablero activo (fuente de responsables posibles).
+// `tableroId`: se manda como tablero_id solo al crear — una tarea no puede
+// cambiar de tablero una vez creada.
+function ModalTarea({ tarea, etapas, miembros, tableroId, onClose, onSaved, user }) {
   const adminUser = esAdmin(user)
 
   const [modo, setModo] = useState(() => {
@@ -440,19 +452,20 @@ function ModalTarea({ tarea, etapas, onClose, onSaved, user }) {
   const [asignados, setAsignados] = useState(asignadosOriginales.length ? asignadosOriginales : [''])
   const [saving,       setSaving]       = useState(false)
   const [error,        setError]        = useState(null)
-  const [usuarios,     setUsuarios]     = useState([])
-  const [loadingUsers, setLoadingUsers] = useState(true)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   // Ids finales sin vacíos ni duplicados (defensivo: los selectores ya los excluyen).
   const asignadosIds = [...new Set(asignados.filter(Boolean))]
 
-  // Opciones posibles: usuarios asignables (activos) + los ya asignados a la tarea,
-  // aunque hoy estén inactivos, para que su selector no quede vacío.
+  // Opciones posibles: miembros del tablero activo + responsables ya asignados
+  // a la tarea que ya no sean miembros, para que su selector no quede vacío
+  // (se muestran marcados "ya no es miembro" más abajo, sin ofrecerse para
+  // agregar en otras filas).
+  const esMiembro = (id) => miembros.some(m => m.id === id)
   const opcionesUsuarios = [
-    ...usuarios,
-    ...(tarea?.asignados ?? []).filter(a => !usuarios.some(u => u.id === a.id)),
+    ...miembros,
+    ...(tarea?.asignados ?? []).filter(a => !esMiembro(a.id)),
   ]
   const nombreUsuario = (id) => opcionesUsuarios.find(u => u.id === id)?.nombre
 
@@ -475,10 +488,6 @@ function ModalTarea({ tarea, etapas, onClose, onSaved, user }) {
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
-    api.getUsuariosAsignables()
-      .then(r => setUsuarios(r.data))
-      .catch(() => {})
-      .finally(() => setLoadingUsers(false))
     return () => { document.body.style.overflow = '' }
   }, [])
 
@@ -497,6 +506,8 @@ function ModalTarea({ tarea, etapas, onClose, onSaved, user }) {
       const payload = {
         ...form,
         ...(asignadosCambiaron ? { asignados: asignadosIds } : {}),
+        // Una tarea no puede cambiar de tablero: solo se manda al crear.
+        ...(!tarea ? { tablero_id: tableroId } : {}),
         tipo: modoEfectivo,
         // Datos de auditoría: el backend los usa para tarea_historial y los descarta antes de guardar en tareas
         usuario_nombre: user?.name  || 'Sistema',
@@ -621,14 +632,9 @@ function ModalTarea({ tarea, etapas, onClose, onSaved, user }) {
                   <span className="text-gray-400"> · elegí usuarios abajo para vincularlo</span>
                 </p>
               )}
-              {loadingUsers ? (
-                <div className={inputCls + ' flex items-center gap-2 text-gray-400'} style={border}>
-                  <RefreshCw size={12} className="animate-spin" />
-                  <span className="text-[13px]">Cargando…</span>
-                </div>
-              ) : opcionesUsuarios.length === 0 ? (
+              {opcionesUsuarios.length === 0 ? (
                 <div className={inputCls + ' text-gray-400 text-[13px]'} style={border}>
-                  Sin usuarios disponibles
+                  Este tablero no tiene miembros
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -642,7 +648,8 @@ function ModalTarea({ tarea, etapas, onClose, onSaved, user }) {
                           <option value="">{i === 0 ? 'Sin asignar' : 'Seleccionar persona'}</option>
                           {disponibles.map(u => (
                             <option key={u.id} value={u.id}>
-                              {u.nombre}{u.estado && u.estado !== 'Activo' ? ' (inactivo)' : ''}
+                              {u.nombre}
+                              {!esMiembro(u.id) ? ' (ya no es miembro)' : (u.estado && u.estado !== 'Activo' ? ' (inactivo)' : '')}
                             </option>
                           ))}
                         </select>
@@ -769,7 +776,7 @@ function PropuestaCard({ propuesta, canAct, onAprobar, onRechazar }) {
 }
 
 // ── PropuestasView ────────────────────────────────────────────────────────────
-function PropuestasView({ user, onKanbanRefresh }) {
+function PropuestasView({ user, tableroId, onKanbanRefresh }) {
   const adminUser = esAdmin(user)
   const [subVista,  setSubVista]  = useState('recibidas')
   const [soloMias,  setSoloMias]  = useState(false)
@@ -785,16 +792,16 @@ function PropuestasView({ user, onKanbanRefresh }) {
     try {
       if (adminUser) {
         // Admins: traen todo y dividen client-side (sin superposición)
-        const res = await api.getPropuestas()
+        const res = await api.getPropuestas({ tablero_id: tableroId })
         setTodas(res.data)
         setRecibidas(res.data.filter(p => p.propuesto_por !== user?.name))
         setEnviadas(res.data.filter(p => p.propuesto_por === user?.name))
       } else {
         // Usuarios comunes: dos llamadas separadas
         const [rRec, rEnv] = await Promise.allSettled([
-          fetchPropias(api.getPropuestas, user),
+          fetchPropias(api.getPropuestas, user, { tablero_id: tableroId }),
           // propuesto_por sigue siendo texto en backend (legacy): se filtra por nombre
-          api.getPropuestas({ propuesto_por: user?.name }),
+          api.getPropuestas({ propuesto_por: user?.name, tablero_id: tableroId }),
         ])
         if (rRec.status === 'fulfilled') setRecibidas(rRec.value.data)
         if (rEnv.status === 'fulfilled') setEnviadas(rEnv.value.data)
@@ -804,7 +811,7 @@ function PropuestasView({ user, onKanbanRefresh }) {
     } finally {
       setLoading(false)
     }
-  }, [adminUser, user])
+  }, [adminUser, user, tableroId])
 
   useEffect(() => { cargar() }, [cargar])
 
@@ -963,7 +970,6 @@ export default function OperationsModule({ user }) {
   const [filtroPrioridad,   setFiltroPrioridad]   = useState('Todos')
   // usuario_id del responsable a filtrar ('' = todos). Incluye tareas compartidas.
   const [filtroResponsable, setFiltroResponsable] = useState('')
-  const [usuariosFiltro,    setUsuariosFiltro]    = useState([])
   const [filtroVencidas,    setFiltroVencidas]    = useState(false)
   const [ordenamiento,      setOrdenamiento]      = useState('created_at')
 
@@ -973,49 +979,117 @@ export default function OperationsModule({ user }) {
   // tarea seleccionada para ver su historial; null = modal cerrado
   const [tareaHistorial, setTareaHistorial] = useState(null)
 
+  // ── Tableros ──────────────────────────────────────────────────────────
+  const [tableros,        setTableros]        = useState([])
+  const [tablerosLoading, setTablerosLoading]  = useState(true)
+  const [tablerosError,   setTablerosError]    = useState(null)
+  const [tableroActivoId, setTableroActivoId]  = useState(() => {
+    try { return localStorage.getItem(TABLERO_STORAGE_KEY) || null } catch { return null }
+  })
+  const [tableroModalOpen, setTableroModalOpen] = useState(false)
+  const [tableroEditando,  setTableroEditando]  = useState(null) // null = crear
+  const [verMiembrosOpen,  setVerMiembrosOpen]  = useState(false)
+  const [soloMisTareas,    setSoloMisTareas]    = useState(false)
+
+  const [aviso, setAviso] = useState(null)
+  const avisoTimer = useRef(null)
+  const showAviso = useCallback((message) => {
+    setAviso(message)
+    clearTimeout(avisoTimer.current)
+    avisoTimer.current = setTimeout(() => setAviso(null), 4000)
+  }, [])
+  useEffect(() => () => clearTimeout(avisoTimer.current), [])
+
   const adminUser = esAdmin(user)
 
-  // Cambiar el filtro de responsable recarga: solo se aplica la respuesta más reciente.
+  const cargarTableros = useCallback(async () => {
+    setTablerosLoading(true)
+    setTablerosError(null)
+    try {
+      const res = await api.getTableros()
+      const data = res.data ?? []
+      setTableros(data)
+      setTableroActivoId(prev => {
+        const next = (prev && data.some(t => t.id === prev)) ? prev : (data[0]?.id ?? null)
+        try {
+          if (next) localStorage.setItem(TABLERO_STORAGE_KEY, next)
+          else localStorage.removeItem(TABLERO_STORAGE_KEY)
+        } catch { /* localStorage puede no estar disponible */ }
+        return next
+      })
+    } catch (e) {
+      setTablerosError(e?.message || 'No se pudieron cargar los tableros')
+    } finally {
+      setTablerosLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { cargarTableros() }, [cargarTableros])
+
+  const seleccionarTablero = (id) => {
+    setTableroActivoId(id)
+    try { localStorage.setItem(TABLERO_STORAGE_KEY, id) } catch { /* localStorage puede no estar disponible */ }
+  }
+
+  const tableroActivo = tableros.find(t => t.id === tableroActivoId) || null
+
+  // Cambiar de tablero o de filtro recarga: solo se aplica la respuesta más reciente.
   const cargaActual = useRef(0)
 
   const cargar = useCallback(async () => {
     const carga = ++cargaActual.current
+    if (!tableroActivoId) {
+      setTareas([]); setPropuestasCount(0); setMetricas(null); setError(null); setLoading(false)
+      return
+    }
     setLoading(true)
     setError(null)
-    try {
-      const [rTareas, rPropuestas, rEtapas, rMetricas] = await Promise.allSettled([
-        // Admins: filtro por persona en backend (asignado_id). Usuarios comunes ya
-        // reciben solo sus tareas; el filtro por id se aplica sobre esa lista.
-        adminUser
-          ? api.getTareas(filtroResponsable ? { asignado_id: filtroResponsable } : {})
-          : fetchPropias(api.getTareas, user),
-        fetchPropias(api.getPropuestas, user),
-        api.getEtapas(),
-        api.getMetricasOperations(),
-      ])
-      if (carga !== cargaActual.current) return
-      if (rTareas.status === 'fulfilled') setTareas(rTareas.value.data)
-      else throw rTareas.reason
-      if (rPropuestas.status === 'fulfilled') {
-        const pendientes = rPropuestas.value.data.filter(p => p.estado_propuesta === 'pendiente').length
-        setPropuestasCount(pendientes)
-      }
-      if (rEtapas.status === 'fulfilled') setEtapas(rEtapas.value.data || [])
-      if (rMetricas.status === 'fulfilled') setMetricas(rMetricas.value)
-    } catch (e) {
-      if (carga === cargaActual.current) setError(e?.message || 'No se pudo conectar con el servidor')
-    } finally {
-      if (carga === cargaActual.current) setLoading(false)
+    const [rTareas, rPropuestas, rEtapas, rMetricas] = await Promise.allSettled([
+      // Admins: filtro por persona en backend (asignado_id). Usuarios comunes ya
+      // reciben solo sus tareas; el filtro por id se aplica sobre esa lista.
+      adminUser
+        ? api.getTareas({ tablero_id: tableroActivoId, ...(filtroResponsable ? { asignado_id: filtroResponsable } : {}) })
+        : fetchPropias(api.getTareas, user, { tablero_id: tableroActivoId }),
+      fetchPropias(api.getPropuestas, user, { tablero_id: tableroActivoId }),
+      api.getEtapas(),
+      api.getMetricasOperations({ tablero_id: tableroActivoId, ...(soloMisTareas ? { solo_mias: true } : {}) }),
+    ])
+    if (carga !== cargaActual.current) return
+
+    // Se perdió el acceso al tablero activo (ej. lo sacaron de miembros
+    // mientras lo tenía abierto): recargamos tableros y caemos al primero
+    // disponible, con un aviso breve en vez de romper la pantalla.
+    const perdioAcceso = [rTareas, rPropuestas, rMetricas].some(
+      r => r.status === 'rejected' && (r.reason?.status === 403 || r.reason?.status === 404)
+    )
+    if (perdioAcceso) {
+      showAviso('Ya no tenés acceso a ese tablero. Mostrando otro disponible.')
+      cargarTableros()
+      setLoading(false)
+      return
     }
-  }, [adminUser, user, filtroResponsable])
+
+    if (rTareas.status === 'fulfilled') setTareas(rTareas.value.data)
+    else setError(rTareas.reason?.message || 'No se pudo conectar con el servidor')
+
+    if (rPropuestas.status === 'fulfilled') {
+      const pendientes = rPropuestas.value.data.filter(p => p.estado_propuesta === 'pendiente').length
+      setPropuestasCount(pendientes)
+    }
+    if (rEtapas.status === 'fulfilled') setEtapas(rEtapas.value.data || [])
+    if (rMetricas.status === 'fulfilled') setMetricas(rMetricas.value)
+    setLoading(false)
+  }, [adminUser, user, filtroResponsable, tableroActivoId, soloMisTareas, cargarTableros, showAviso])
 
   useEffect(() => { cargar() }, [cargar])
 
-  useEffect(() => {
-    api.getUsuariosAsignables()
-      .then(r => setUsuariosFiltro(r.data ?? []))
-      .catch(() => {})
-  }, [])
+  const abrirNuevoTablero    = () => { setTableroEditando(null);        setTableroModalOpen(true) }
+  const abrirEditarTablero   = () => { setTableroEditando(tableroActivo); setTableroModalOpen(true) }
+  const handleTableroGuardado = (guardado) => {
+    setTableroModalOpen(false)
+    seleccionarTablero(guardado.id)
+    cargarTableros()
+  }
 
   const handleCambiarEtapa = async (id, nuevaEtapaId) => {
     // Se incluyen datos de auditoría para que el backend registre el cambio en tarea_historial
@@ -1071,72 +1145,175 @@ export default function OperationsModule({ user }) {
   return (
     <div className="fade-in space-y-6">
 
+      {/* ── Pestañas de tablero ── */}
+      {tablerosLoading ? (
+        <div className="flex items-center gap-1.5 text-[12.5px] text-gray-400">
+          <RefreshCw size={12} className="animate-spin" /> Cargando tableros…
+        </div>
+      ) : tablerosError ? (
+        <div className="flex items-center gap-2 text-[12.5px] text-red-600">
+          <AlertCircle size={13} className="flex-shrink-0" /> {tablerosError}
+          <button onClick={cargarTableros} className="underline hover:no-underline font-medium">Reintentar</button>
+        </div>
+      ) : (tableros.length > 0 || adminUser) && (
+        <div className="flex gap-2 flex-wrap">
+          {tableros.map(t => {
+            const active = t.id === tableroActivoId
+            return (
+              <button key={t.id} onClick={() => seleccionarTablero(t.id)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold border transition-all"
+                style={active
+                  ? { background: '#0F6E56', color: '#fff', borderColor: '#0F6E56' }
+                  : { borderColor: 'rgba(15,110,86,0.2)', color: '#374151', background: '#fff' }}>
+                {t.nombre}
+                {typeof t.cantidad_tareas === 'number' && (
+                  <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full"
+                    style={active ? { background: 'rgba(255,255,255,0.25)', color: '#fff' } : { background: '#EEF1EE', color: '#6b7280' }}>
+                    {t.cantidad_tareas}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+          {adminUser && (
+            <button onClick={abrirNuevoTablero}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium border border-dashed transition-colors hover:bg-white"
+              style={{ borderColor: 'rgba(15,110,86,0.35)', color: '#0F6E56' }} title="Nuevo tablero">
+              <Plus size={14} /> Nuevo tablero
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── Encabezado ── */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="font-sans text-[20px] font-semibold text-gray-900">Operativo</h2>
-          <p className="text-[13px] text-gray-500 mt-0.5">Gestión de tareas y procesos internos</p>
+          <h2 className="font-sans text-[20px] font-semibold text-gray-900">{tableroActivo?.nombre || 'Operativo'}</h2>
+          <p className="text-[13px] text-gray-500 mt-0.5">
+            {tableroActivo ? `Operativo · ${tableroActivo.descripcion || 'Gestión de tareas y procesos internos'}` : 'Gestión de tareas y procesos internos'}
+          </p>
         </div>
         <div className="flex items-center gap-2">
+          {adminUser && tableroActivo && (
+            <button onClick={abrirEditarTablero} className={btnSecondary}
+              style={{ borderColor: 'rgba(15,110,86,0.2)' }} title="Editar tablero">
+              <Edit2 size={14} /> Editar tablero
+            </button>
+          )}
           <button onClick={() => setEtapasModalOpen(true)} className={btnSecondary}
             style={{ borderColor: 'rgba(15,110,86,0.2)' }} title="Configurar etapas">
             <Settings2 size={14} /> Configurar etapas
           </button>
-          <button onClick={cargar} className={btnSecondary}
+          <button onClick={() => { cargarTableros(); cargar() }} className={btnSecondary}
             style={{ borderColor: 'rgba(15,110,86,0.2)' }} title="Recargar">
             <RefreshCw size={14} />
           </button>
-          <button onClick={abrirNueva} className={btnPrimary} style={{ background: '#0F6E56' }}>
-            <Plus size={15} /> Nueva Tarea
-          </button>
+          {tableroActivo && (
+            <button onClick={abrirNueva} className={btnPrimary} style={{ background: '#0F6E56' }}>
+              <Plus size={15} /> Nueva Tarea
+            </button>
+          )}
         </div>
       </div>
 
-      {/* ── Métricas ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        <StatCard label="Total tareas" value={metricas?.total                       ?? '—'} icon={Briefcase}     color="#6366F1" />
-        <StatCard label="Pendientes"   value={metricas?.porTipoBase?.pendiente      ?? '—'} icon={AlertCircle}   color="#EF9F27" />
-        <StatCard label="En proceso"   value={metricas?.porTipoBase?.en_curso       ?? '—'} icon={Clock}         color="#0EA5E9" />
-        <StatCard label="Completadas"  value={metricas?.porTipoBase?.completada     ?? '—'} icon={CheckCircle}   color="#1D9E75" />
-        <StatCard label="Vencidas"     value={loading ? '—' : (metricas?.vencidas ?? 0)} icon={AlertTriangle} color="#DC2626"
-          onClick={() => setFiltroVencidas(v => !v)} active={filtroVencidas} />
-      </div>
-
-      {/* ── Tabs: Tablero / Propuestas ── */}
-      <div className="flex gap-1 bg-white rounded-xl p-1 shadow-sm border w-fit"
-        style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
-        {[
-          { id: 'kanban',     label: 'Tablero',     icon: Briefcase },
-          { id: 'propuestas', label: 'Propuestas',  icon: Send      },
-        ].map(({ id, label, icon: Icon }) => {
-          const active = vista === id
-          return (
-            <button key={id} onClick={() => setVista(id)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium transition-all duration-150"
-              style={active ? { background: '#0F6E56', color: '#fff' } : { color: '#6b7280' }}>
-              <Icon size={14} />
-              {label}
-              {id === 'propuestas' && propuestasCount > 0 && (
-                <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full"
-                  style={active
-                    ? { background: 'rgba(255,255,255,0.3)', color: '#fff' }
-                    : { background: '#EEF2FF', color: '#6366F1' }}>
-                  {propuestasCount}
-                </span>
-              )}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* ── Vista: Propuestas ── */}
-      {vista === 'propuestas' && (
-        <PropuestasView user={user} onKanbanRefresh={cargar} />
+      {/* ── Sin tableros disponibles ── */}
+      {!tablerosLoading && !tablerosError && tableros.length === 0 && (
+        <div className="flex flex-col items-center justify-center text-center py-16 px-6 bg-white rounded-2xl border" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: '#E1F5EE' }}>
+            <Briefcase size={24} style={{ color: '#0F6E56' }} />
+          </div>
+          <p className="font-serif text-[16px] font-semibold text-gray-800 mb-1">Todavía no sos miembro de ningún tablero.</p>
+          <p className="text-[13px] text-gray-500">Pedile a Dirección o Superadmin que te agregue a uno.</p>
+        </div>
       )}
 
-      {/* ── Vista: Tablero Kanban ── */}
-      {vista === 'kanban' && (
+      {tableroActivo && (
         <>
+          {/* ── Miembros del tablero + "Solo mis tareas" ── */}
+          <div className="bg-white rounded-xl border shadow-sm p-3.5 flex items-center justify-between gap-4 flex-wrap"
+            style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
+            <div className="flex items-center gap-3 min-w-0 flex-wrap">
+              <div className="flex -space-x-2 flex-shrink-0">
+                {tableroActivo.miembros.slice(0, 5).map((m, i) => (
+                  <div key={m.id} title={m.nombre}
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-[10.5px] font-bold text-white border-2 border-white flex-shrink-0"
+                    style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>
+                    {(m.nombre || '?').trim().slice(0, 1).toUpperCase()}
+                  </div>
+                ))}
+                {tableroActivo.miembros.length > 5 && (
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-gray-600 bg-gray-200 border-2 border-white flex-shrink-0">
+                    +{tableroActivo.miembros.length - 5}
+                  </div>
+                )}
+              </div>
+              <p className="text-[12.5px] text-gray-500">
+                {tableroActivo.miembros.length} {tableroActivo.miembros.length === 1 ? 'miembro ve' : 'miembros ven'} este tablero
+              </p>
+              {!adminUser && (
+                <button onClick={() => setVerMiembrosOpen(true)}
+                  className="flex items-center gap-1.5 text-[12.5px] font-semibold flex-shrink-0" style={{ color: '#0F6E56' }}>
+                  <Users size={13} /> Ver miembros
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2.5 flex-shrink-0">
+              <span className="text-[12.5px] font-medium text-gray-600">Solo mis tareas</span>
+              <button type="button" role="switch" aria-checked={soloMisTareas}
+                onClick={() => setSoloMisTareas(v => !v)}
+                className="relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors cursor-pointer"
+                style={{ background: soloMisTareas ? '#0F6E56' : '#D1D5DB' }}>
+                <span className="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"
+                  style={{ transform: soloMisTareas ? 'translateX(18px)' : 'translateX(3px)' }} />
+              </button>
+            </div>
+          </div>
+
+          {/* ── Métricas ── */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            <StatCard label="Total tareas" value={metricas?.total                       ?? '—'} icon={Briefcase}     color="#6366F1" />
+            <StatCard label="Pendientes"   value={metricas?.porTipoBase?.pendiente      ?? '—'} icon={AlertCircle}   color="#EF9F27" />
+            <StatCard label="En proceso"   value={metricas?.porTipoBase?.en_curso       ?? '—'} icon={Clock}         color="#0EA5E9" />
+            <StatCard label="Completadas"  value={metricas?.porTipoBase?.completada     ?? '—'} icon={CheckCircle}   color="#1D9E75" />
+            <StatCard label="Vencidas"     value={loading ? '—' : (metricas?.vencidas ?? 0)} icon={AlertTriangle} color="#DC2626"
+              onClick={() => setFiltroVencidas(v => !v)} active={filtroVencidas} />
+          </div>
+
+          {/* ── Tabs: Tablero / Propuestas ── */}
+          <div className="flex gap-1 bg-white rounded-xl p-1 shadow-sm border w-fit"
+            style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
+            {[
+              { id: 'kanban',     label: 'Tablero',     icon: Briefcase },
+              { id: 'propuestas', label: 'Propuestas',  icon: Send      },
+            ].map(({ id, label, icon: Icon }) => {
+              const active = vista === id
+              return (
+                <button key={id} onClick={() => setVista(id)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium transition-all duration-150"
+                  style={active ? { background: '#0F6E56', color: '#fff' } : { color: '#6b7280' }}>
+                  <Icon size={14} />
+                  {label}
+                  {id === 'propuestas' && propuestasCount > 0 && (
+                    <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full"
+                      style={active
+                        ? { background: 'rgba(255,255,255,0.3)', color: '#fff' }
+                        : { background: '#EEF2FF', color: '#6366F1' }}>
+                      {propuestasCount}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* ── Vista: Propuestas ── */}
+          {vista === 'propuestas' && (
+            <PropuestasView user={user} tableroId={tableroActivoId} onKanbanRefresh={cargar} />
+          )}
+
+          {/* ── Vista: Tablero Kanban ── */}
+          {vista === 'kanban' && (
+            <>
           {/* Filtros */}
           <div className="bg-white rounded-xl border shadow-sm p-4 space-y-2"
             style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
@@ -1169,7 +1346,7 @@ export default function OperationsModule({ user }) {
                 <select value={filtroResponsable} onChange={e => setFiltroResponsable(e.target.value)}
                   className={inputCls + ' appearance-none pl-8 pr-8'} style={{ borderColor: 'rgba(15,110,86,0.2)' }}>
                   <option value="">Todos los responsables</option>
-                  {usuariosFiltro.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                  {tableroActivo.miembros.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
                 </select>
                 <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
@@ -1285,25 +1462,54 @@ export default function OperationsModule({ user }) {
           )}
         </>
       )}
+        </>
+      )}
 
       {/* ── Modal crear / editar ── */}
       {showModal && (
         <ModalTarea
           tarea={editTarea}
           etapas={etapas}
+          miembros={tableroActivo?.miembros ?? []}
+          tableroId={tableroActivoId}
           user={user}
           onClose={cerrarModal}
           onSaved={() => { cerrarModal(); cargar() }}
         />
       )}
 
-      {/* ── Modal configurar etapas ── */}
+      {/* ── Modal configurar etapas (global, no depende del tablero) ── */}
       <EtapasConfigModal
         open={etapasModalOpen}
         etapas={etapas}
         onClose={() => setEtapasModalOpen(false)}
         onChanged={cargar}
       />
+
+      {/* ── Modal crear / editar tablero (solo Dirección/Superadmin) ── */}
+      <TableroModal
+        open={tableroModalOpen}
+        tablero={tableroEditando}
+        onClose={() => setTableroModalOpen(false)}
+        onSaved={handleTableroGuardado}
+      />
+
+      {/* ── Ver miembros del tablero — solo lectura ── */}
+      {verMiembrosOpen && tableroActivo && (
+        <VerMiembrosModal
+          tablero={tableroActivo}
+          onClose={() => setVerMiembrosOpen(false)}
+        />
+      )}
+
+      {/* ── Aviso breve (ej. se perdió acceso al tablero activo) ── */}
+      {aviso && (
+        <div className="fixed bottom-6 right-6 flex items-center gap-2 text-white text-[13px] font-medium px-4 py-3 rounded-xl shadow-lg z-[60]"
+          style={{ background: '#04342C' }}>
+          <AlertTriangle size={15} style={{ color: '#FCD34D' }} />
+          {aviso}
+        </div>
+      )}
 
       {/* ── Modal historial de cambios — solo lectura ── */}
       {tareaHistorial && (
