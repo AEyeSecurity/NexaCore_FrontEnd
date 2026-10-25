@@ -93,6 +93,23 @@ function ModuleCard({ item, onClick }) {
   )
 }
 
+// Mismo tamaño/forma que ModuleCard — ocupa el lugar de "Indicadores" mientras
+// se resuelve la Matriz de permisos real, para que al llegar la respuesta no
+// se corran las demás tarjetas (solo ese lugar cambia de contenido).
+function ModuleCardSkeleton() {
+  return (
+    <div
+      aria-hidden="true"
+      className="animate-pulse bg-white rounded-3xl flex flex-col border border-[rgba(15,110,86,0.06)]"
+      style={{ boxShadow: CARD_SHADOW, minHeight: FIT.cardMinH, padding: FIT.cardPad }}
+    >
+      <div className="w-10 h-10 rounded-full flex-shrink-0" style={{ background: '#EEF1EE' }} />
+      <div className="mt-auto pt-2.5 h-4 w-24 rounded" style={{ background: '#EEF1EE' }} />
+      <div className="mt-2 h-3 w-32 rounded" style={{ background: '#EEF1EE' }} />
+    </div>
+  )
+}
+
 function SystemCard({ item, onClick }) {
   return (
     <button
@@ -122,9 +139,13 @@ export default function Home({ user, onNavigate, onLogout }) {
   const visibleSystem   = SYSTEM_ITEMS.filter(m => !allowedPages || allowedPages.includes(m.id))
 
   // Indicadores: mismo criterio que el menú lateral — Matriz de permisos real
-  // (allowedModules), no por rol.
-  const allowedModules = useAllowedModules(user?.email)
-  const indicadoresEntry = allowedModules.includes('indicadores') ? [INDICADORES_ITEM] : []
+  // (allowedModules), no por rol. Mientras esa respuesta no llegó se reserva
+  // el lugar con un skeleton (en vez de no renderizar nada) para que el resto
+  // de las tarjetas no se corra cuando por fin se sabe si corresponde o no.
+  const [allowedModules, modulosLoading] = useAllowedModules(user?.email)
+  const indicadoresEntry = modulosLoading
+    ? [{ id: 'indicadores-skeleton', skeleton: true }]
+    : allowedModules.includes('indicadores') ? [INDICADORES_ITEM] : []
 
   // Orden: Dashboard, Indicadores, luego el resto de módulos visibles
   const dashboardEntry = canSeeDashboard ? [DASHBOARD_ITEM] : []
@@ -184,7 +205,9 @@ export default function Home({ user, onNavigate, onLogout }) {
               <SectionHeading eyebrow="Módulos principales" title="Todo lo que necesitás, en un solo lugar" />
               <div className={GRID} style={{ gap: FIT.gridGap }}>
                 {allModules.map(item => (
-                  <ModuleCard key={item.id} item={item} onClick={() => onNavigate(item.id)} />
+                  item.skeleton
+                    ? <ModuleCardSkeleton key={item.id} />
+                    : <ModuleCard key={item.id} item={item} onClick={() => onNavigate(item.id)} />
                 ))}
               </div>
             </section>

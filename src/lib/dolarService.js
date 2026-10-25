@@ -70,10 +70,10 @@ async function fetchDolarAPI(tipo) {
   const res = await fetchConTimeout(url)
   if (!res.ok) throw new Error(`DolarAPI ${tipo} HTTP ${res.status}`)
   const json = await res.json()
-  const valor = json.venta ?? json.compra
-  if (!valor) throw new Error(`DolarAPI ${tipo}: sin valor disponible`)
+  const valor = Number(json.venta ?? json.compra)
+  if (!Number.isFinite(valor) || valor <= 0) throw new Error(`DolarAPI ${tipo}: sin valor disponible`)
   return {
-    valor:       Number(valor),
+    valor,
     fuente:      tipo === 'oficial' ? 'DolarAPI Oficial' : 'DolarAPI Blue',
     descripcion: `Dólar ${tipo} (venta)`,
   }
