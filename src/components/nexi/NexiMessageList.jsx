@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
-import { AlertCircle, X, FileText, Download, Loader2 } from 'lucide-react'
+import { AlertCircle, X, FileText, Download, Loader2, RotateCcw } from 'lucide-react'
 import avatarNexi from '../../../resources/avatarNexi.png'
 import { useNexi } from '../../context/NexiContext'
-import { NEXI_GENERAL_SUGGESTIONS } from '../../lib/nexiModules'
+import { suggestionsFor, sourceLabels } from '../../lib/nexiModules'
 
 const bubbleShape = 'rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-[13px] leading-snug break-words'
 const bubbleBase = `max-w-[85%] ${bubbleShape}`
@@ -104,9 +104,20 @@ function ThinkingIndicator() {
   )
 }
 
-function Suggestions({ nexiModules, onPick, disabled }) {
-  const allowedIds = nexiModules.map(m => m.id)
-  const suggestions = NEXI_GENERAL_SUGGESTIONS.filter(s => allowedIds.includes(s.module)).map(s => s.text)
+// Módulos consultados para armar la respuesta. Solo existe en las respuestas de
+// esta sesión: el historial del backend no guarda herramientasUsadas.
+function Sources({ herramientasUsadas }) {
+  const labels = sourceLabels(herramientasUsadas)
+  if (labels.length === 0) return null
+  return (
+    <p className="text-[11px] px-1" style={{ color: '#4B5A55' }}>
+      Fuentes: {labels.join(', ')}
+    </p>
+  )
+}
+
+function Suggestions({ nexiModules, currentModule, onPick, disabled }) {
+  const suggestions = suggestionsFor(nexiModules, currentModule)
 
   if (suggestions.length === 0) return null
 
@@ -130,7 +141,7 @@ function Suggestions({ nexiModules, onPick, disabled }) {
 export default function NexiMessageList() {
   const {
     messages, user, isSending, isLoadingMessages, error, dismissError,
-    nexiModules, sendMessage,
+    nexiModules, currentModule, sendMessage, retryMessage,
   } = useNexi()
   const scrollRef = useRef(null)
 
@@ -156,6 +167,7 @@ export default function NexiMessageList() {
           </AssistantRow>
           <Suggestions
             nexiModules={nexiModules}
+            currentModule={currentModule}
             onPick={sendMessage}
             disabled={isSending}
           />
@@ -177,22 +189,38 @@ export default function NexiMessageList() {
             >
               {msg.contenido}
             </div>
-            {msg.fallido && <span className="text-[11px] text-red-600">No enviado</span>}
+            {msg.fallido && (
+              <span className="flex items-center gap-2 text-[11px] text-red-600">
+                No enviado
+                <button
+                  onClick={() => retryMessage(msg.id)}
+                  disabled={isSending}
+                  className="flex items-center gap-1 font-medium underline-offset-2 hover:underline cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+                  style={{ color: '#0F6E56' }}
+                >
+                  <RotateCcw size={11} />
+                  Reintentar
+                </button>
+              </span>
+            )}
           </div>
         ) : (
           <AssistantRow key={msg.id}>
-            {msg.reportes?.length > 0 ? (
-              <div className="max-w-[85%] min-w-0 flex flex-col gap-2">
+            <div className="max-w-[85%] min-w-0 flex flex-col items-start gap-1">
+              {msg.reportes?.length > 0 ? (
+                <div className="self-stretch flex flex-col gap-2">
+                  <div className={bubbleShape} style={{ background: '#F1F5F3', color: '#233F38' }}>
+                    <AssistantMarkdown>{msg.contenido}</AssistantMarkdown>
+                  </div>
+                  {msg.reportes.map(r => <ReportCard key={r.id} reporte={r} />)}
+                </div>
+              ) : (
                 <div className={bubbleShape} style={{ background: '#F1F5F3', color: '#233F38' }}>
                   <AssistantMarkdown>{msg.contenido}</AssistantMarkdown>
                 </div>
-                {msg.reportes.map(r => <ReportCard key={r.id} reporte={r} />)}
-              </div>
-            ) : (
-              <div className={bubbleBase} style={{ background: '#F1F5F3', color: '#233F38' }}>
-                <AssistantMarkdown>{msg.contenido}</AssistantMarkdown>
-              </div>
-            )}
+              )}
+              <Sources herramientasUsadas={msg.herramientasUsadas} />
+            </div>
           </AssistantRow>
         )
       ))}
