@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import logoUrl from '../../resources/logo3.png'
 import { ROLE_PAGES, useAllowedModules } from '../lib/permissions'
+import { useNexi } from '../context/NexiContext'
 import { HeroOndas, ModuloIlustracion } from './home/HomeIlustraciones'
 
 const MODULES = [
@@ -143,6 +144,7 @@ export default function Home({ user, onNavigate, onLogout }) {
   // el lugar con un skeleton (en vez de no renderizar nada) para que el resto
   // de las tarjetas no se corra cuando por fin se sabe si corresponde o no.
   const [allowedModules, modulosLoading] = useAllowedModules(user?.email)
+  const { isOpen: nexiOpen } = useNexi()
   const indicadoresEntry = modulosLoading
     ? [{ id: 'indicadores-skeleton', skeleton: true }]
     : allowedModules.includes('indicadores') ? [INDICADORES_ITEM] : []
@@ -152,7 +154,7 @@ export default function Home({ user, onNavigate, onLogout }) {
   const allModules = [...dashboardEntry, ...indicadoresEntry, ...visibleModules]
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden" style={{ background: 'linear-gradient(180deg, #F2F6F4 0%, #EEF2F0 60%, #EAF0ED 100%)' }}>
+    <div className={`h-screen flex flex-col overflow-hidden transition-[margin] duration-300 ease-in-out ${nexiOpen ? 'md:mr-[400px]' : ''}`} style={{ background: 'linear-gradient(180deg, #F2F6F4 0%, #EEF2F0 60%, #EAF0ED 100%)' }}>
 
       {/* Top bar */}
       <div

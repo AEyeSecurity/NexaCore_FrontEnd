@@ -16,6 +16,8 @@ import OrganizationModule from './modules/organization/OrganizationModule'
 import IndicadoresModule from './modules/indicadores/IndicadoresModule'
 import ReportesModule from './modules/reportes/ReportesModule'
 import AuthCallback from './components/AuthCallback'
+import { NexiProvider } from './context/NexiContext'
+import NexiWidget from './components/nexi/NexiWidget'
 import { getAllowedPages, prefetchAllowedModules } from './lib/permissions'
 
 // Páginas que renderiza Layout. Cualquier otro valor de `page` vuelve a Inicio.
@@ -123,11 +125,9 @@ export default function App() {
     return <Login onLogin={handleLogin} />
   }
 
-  if (page === 'home' || !LAYOUT_PAGES.has(page)) {
-    return <Home user={user} onNavigate={navigate} onLogout={handleLogout} />
-  }
-
-  return (
+  const content = (page === 'home' || !LAYOUT_PAGES.has(page))
+    ? <Home user={user} onNavigate={navigate} onLogout={handleLogout} />
+    : (
     <Layout page={page} onNavigate={navigate} user={user} onLogout={handleLogout}>
       {page === 'dashboard'     && <DashboardHub onNavigate={navigate} user={user} />}
       {page === 'indicadores'   && <IndicadoresModule />}
@@ -145,5 +145,16 @@ export default function App() {
       {page === 'reportes'      && <ReportesModule />}
       {page === 'usuarios'      && <Usuarios user={user} />}
       {page === 'organizacion'  && <OrganizationModule user={user} />}    </Layout>
+    )
+
+  // Un único NexiProvider y un único NexiWidget para Inicio y las páginas del
+  // Layout: la conversación abierta sobrevive a la navegación. La key reinicia
+  // Nexi si cambia el usuario; el email está desde el login (el `id` llega
+  // después con el perfil y remontaría el provider).
+  return (
+    <NexiProvider key={user.email} user={user} page={page}>
+      {content}
+      <NexiWidget />
+    </NexiProvider>
   )
 }
