@@ -5,8 +5,7 @@ import {
   Zap, UserCog, LogOut, Home, Building2, ClipboardCheck, Gauge,
 } from 'lucide-react'
 import { ROLE_PAGES, useAllowedModules } from '../lib/permissions'
-import { NexiProvider, useNexi } from '../context/NexiContext'
-import NexiWidget from './nexi/NexiWidget'
+import { useNexi } from '../context/NexiContext'
 
 const NAV = [
   { section: 'PRINCIPAL', items: [
@@ -220,16 +219,14 @@ export default function Layout({ children, page, onNavigate, user, onLogout }) {
   )
 
   return (
-    <NexiProvider user={user} allowedModules={allowedModules}>
-      <LayoutShell
-        collapsed={collapsed}
-        mobileOpen={mobileOpen}
-        setMobileOpen={setMobileOpen}
-        renderSidebar={renderSidebar}
-      >
-        {children}
-      </LayoutShell>
-    </NexiProvider>
+    <LayoutShell
+      collapsed={collapsed}
+      mobileOpen={mobileOpen}
+      setMobileOpen={setMobileOpen}
+      renderSidebar={renderSidebar}
+    >
+      {children}
+    </LayoutShell>
   )
 }
 
@@ -293,8 +290,6 @@ function LayoutShell({ collapsed, mobileOpen, setMobileOpen, renderSidebar, chil
         </main>
 
       </div>
-
-      <NexiWidget />
     </div>
   )
 }

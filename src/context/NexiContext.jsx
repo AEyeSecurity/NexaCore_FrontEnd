@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react'
 import { api } from '../lib/api'
-import { getNexiModules } from '../lib/nexiModules'
+import { getNexiModules, moduleForPage } from '../lib/nexiModules'
+import { useAllowedModules } from '../lib/permissions'
 import { descargarReporteNexi } from '../lib/nexiReportes'
 
 const NexiContext = createContext(null)
@@ -22,10 +23,15 @@ function nexiErrorMessage(err) {
   }
 }
 
-// `allowedModules` viene de la Matriz de permisos real (useAllowedModules en
-// Layout); Nexi no calcula permisos propios.
-export function NexiProvider({ children, user, allowedModules }) {
+// Montado en App (Inicio y páginas del Layout comparten la conversación).
+// `allowedModules` viene de la Matriz de permisos real, el mismo pedido
+// cacheado que usa el sidebar; Nexi no calcula permisos propios.
+// `page` (página actual de App) solo ordena las sugerencias: al backend se
+// le sigue enviando el modo General.
+export function NexiProvider({ children, user, page }) {
+  const [allowedModules] = useAllowedModules(user?.email)
   const nexiModules = useMemo(() => getNexiModules(allowedModules), [allowedModules])
+  const currentModule = moduleForPage(page)
 
   const [isOpen, setIsOpen] = useState(false)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
@@ -151,7 +157,11 @@ export function NexiProvider({ children, user, allowedModules }) {
       }
     } catch (err) {
       if (viewRef.current !== view) return
-      setMessages(prev => prev.map(m => (m.id === tempId ? { ...m, fallido: true } : m)))
+      // Sin status HTTP (red caída, respuesta no JSON de un proxy) el backend
+      // pudo haber guardado el intercambio: el reintento lo verifica antes de reenviar.
+      setMessages(prev => prev.map(m => (m.id === tempId
+        ? { ...m, fallido: true, errorRed: !err?.status, conversationId: currentConversationId }
+        : m)))
 
       if (err.status === 404 && currentConversationId) {
         setConversations(prev => prev.filter(c => c.id !== currentConversationId))
@@ -163,6 +173,45 @@ export function NexiProvider({ children, user, allowedModules }) {
       setIsSending(false)
     }
   }, [currentConversationId, resetConversation])
+
+  // Reintento de un mensaje "No enviado". El backend guarda pregunta y respuesta
+  // juntas y solo si la respuesta salió bien, así que reenviar no duplica nada.
+  // Única excepción: error de red en una conversación existente, donde el
+  // servidor pudo haber guardado el intercambio igual. En ese caso, si el último
+  // mensaje del usuario en el servidor es este mismo texto, se agrega lo guardado
+  // en vez de reenviar. En una conversación nueva se reenvía directamente.
+  const retryMessage = useCallback(async (id) => {
+    const fallido = messages.find(m => m.id === id && m.fallido)
+    if (!fallido || sendingRef.current) return
+
+    if (fallido.errorRed && fallido.conversationId) {
+      const view = viewRef.current
+      sendingRef.current = true
+      setIsSending(true)
+      setError(null)
+      let guardados = null
+      try {
+        const res = await api.getNexiMessages(fallido.conversationId)
+        const data = res?.data ?? []
+        const ultimo = data.findLastIndex(m => m.rol === 'usuario')
+        if (ultimo !== -1 && data[ultimo].contenido === fallido.contenido) guardados = data.slice(ultimo)
+      } catch (err) {
+        if (viewRef.current === view) setError(nexiErrorMessage(err))
+        return
+      } finally {
+        sendingRef.current = false
+        setIsSending(false)
+      }
+      if (viewRef.current !== view) return
+      if (guardados) {
+        setMessages(prev => [...prev.filter(m => m.id !== id), ...guardados])
+        return
+      }
+    }
+
+    setMessages(prev => prev.filter(m => m.id !== id))
+    sendMessage(fallido.contenido)
+  }, [messages, sendMessage])
 
   const dismissError = useCallback(() => setError(null), [])
 
@@ -178,11 +227,11 @@ export function NexiProvider({ children, user, allowedModules }) {
   const value = {
     isOpen, open, close, toggle,
     isHistoryOpen, openHistory, closeHistory,
-    nexiModules,
+    nexiModules, currentModule,
     conversations, isLoadingConversations,
     currentConversationId, newConversation, selectConversation, deleteConversation,
     messages, isLoadingMessages,
-    sendMessage, isSending,
+    sendMessage, retryMessage, isSending,
     error, dismissError,
     downloadReport,
     user,

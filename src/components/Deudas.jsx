@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Trash2, RefreshCw, AlertCircle, CheckCircle, Clock, X, Save } from 'lucide-react'
+import { Plus, Trash2, RefreshCw, AlertCircle, AlertTriangle, CheckCircle, Clock, Lock, X, Save } from 'lucide-react'
 import { api } from '../lib/api'
 import AppModal from './AppModal'
 
@@ -7,6 +7,14 @@ function fmt(n) {
   return new Intl.NumberFormat('es-AR', {
     style: 'currency', currency: 'ARS', maximumFractionDigits: 0
   }).format(n)
+}
+
+// Mismo criterio que el historial de Reportes: 403 = sin permiso de Finanzas
+// (RN-02, lo valida el backend); el resto, mensaje genérico.
+function cargaErrorMessage(err) {
+  if (err?.status === 403) return 'No tenés permisos para ver Deudas.'
+  if (err?.status === 401) return 'Tu sesión expiró. Volvé a iniciar sesión para ver las deudas.'
+  return 'No se pudieron cargar las deudas. Intentá nuevamente.'
 }
 
 function isVencida(fechaStr) {
@@ -144,14 +152,17 @@ export default function Deudas() {
   const [editItem, setEditItem] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [pagandoId, setPagandoId] = useState(null)
+  const [error, setError] = useState(null) // null | { status, message }
 
   const cargar = useCallback(async () => {
     setLoading(true)
+    setError(null)
     try {
       const data = await api.getDeudas()
       setItems(data.data)
     } catch (e) {
-      console.error(e)
+      if (e?.status === 403) setItems([])
+      setError({ status: e?.status, message: cargaErrorMessage(e) })
     } finally {
       setLoading(false)
     }
@@ -184,6 +195,7 @@ export default function Deudas() {
   const pendientes = items.filter(d => d.estado !== 'Pagada')
   const totalPendiente = pendientes.reduce((s, d) => s + Number(d.monto), 0)
   const vencidas = items.filter(d => d.estado !== 'Pagada' && isVencida(d.vencimiento))
+  const sinPermiso = error?.status === 403
 
   const estadoChip = (deuda) => {
     const venc = deuda.estado !== 'Pagada' && isVencida(deuda.vencimiento)
@@ -206,15 +218,17 @@ export default function Deudas() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-sans text-[20px] font-semibold text-gray-900">Deudas & Obligaciones</h2>
-          <p className="text-[13px] text-gray-500 mt-0.5">
-            {pendientes.length} pendiente{pendientes.length !== 1 ? 's' : ''} · Total:{' '}
-            <span className="font-semibold text-red-500">{fmt(totalPendiente)}</span>
-            {vencidas.length > 0 && (
-              <span className="ml-2 text-red-500 font-medium">
-                · {vencidas.length} vencida{vencidas.length !== 1 ? 's' : ''}
-              </span>
-            )}
-          </p>
+          {!sinPermiso && (
+            <p className="text-[13px] text-gray-500 mt-0.5">
+              {pendientes.length} pendiente{pendientes.length !== 1 ? 's' : ''} · Total:{' '}
+              <span className="font-semibold text-red-500">{fmt(totalPendiente)}</span>
+              {vencidas.length > 0 && (
+                <span className="ml-2 text-red-500 font-medium">
+                  · {vencidas.length} vencida{vencidas.length !== 1 ? 's' : ''}
+                </span>
+              )}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={cargar}
@@ -222,11 +236,13 @@ export default function Deudas() {
             style={{ borderColor: 'rgba(15,110,86,0.2)' }}>
             <RefreshCw size={14} />
           </button>
-          <button onClick={() => { setEditItem(null); setShowForm(true) }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-[13px] font-medium shadow-sm"
-            style={{ background: '#0F6E56' }}>
-            <Plus size={15} /> Registrar deuda
-          </button>
+          {!sinPermiso && (
+            <button onClick={() => { setEditItem(null); setShowForm(true) }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-[13px] font-medium shadow-sm"
+              style={{ background: '#0F6E56' }}>
+              <Plus size={15} /> Registrar deuda
+            </button>
+          )}
         </div>
       </div>
 
@@ -240,11 +256,34 @@ export default function Deudas() {
         </div>
       )}
 
+      {error && !sinPermiso && items.length > 0 && (
+        <p className="text-[12.5px] px-3 py-2 rounded-lg" style={{ background: '#FCE9E9', color: '#C23B3A' }} role="alert">
+          {error.message}
+        </p>
+      )}
+
       <div className="bg-white rounded-xl border shadow-sm overflow-hidden"
         style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
         {loading ? (
           <div className="flex items-center justify-center h-48 text-gray-400 text-[13.5px]">
             <RefreshCw size={18} className="animate-spin mr-2" /> Cargando...
+          </div>
+        ) : sinPermiso ? (
+          <div className="flex flex-col items-center justify-center gap-3 h-48 px-4 text-center text-gray-400 text-[13.5px]">
+            <Lock size={20} />
+            <p className="text-gray-500">{error.message}</p>
+          </div>
+        ) : error && items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-3 h-48 px-4 text-center text-gray-400 text-[13.5px]">
+            <AlertTriangle size={20} style={{ color: '#E24B4A' }} />
+            <p className="text-gray-500">{error.message}</p>
+            <button
+              onClick={cargar}
+              className="px-4 py-2 rounded-xl text-white text-[13px] font-medium"
+              style={{ background: '#0F6E56' }}
+            >
+              Reintentar
+            </button>
           </div>
         ) : (
           <div className="overflow-x-auto">
