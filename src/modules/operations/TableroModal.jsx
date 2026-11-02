@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Save, Search, RefreshCw, AlertCircle, AlertTriangle } from 'lucide-react'
+import { X, Save, AlertCircle, AlertTriangle, ShieldCheck } from 'lucide-react'
 import { api } from '../../lib/api'
+import UsuariosSelector from './UsuariosSelector'
 
 const inputCls = [
   'w-full border rounded-xl px-3 py-2.5 text-[13.5px] outline-none',
@@ -14,16 +15,23 @@ const btnPrimary =
 const btnSecondary =
   'flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[13px] font-medium text-gray-600 bg-white hover:bg-gray-50 transition-colors cursor-pointer'
 
+const mismosIds = (a, b) => a.length === b.length && a.every(id => b.includes(id))
+
 // Crear / editar un tablero: nombre, descripción y miembros (selector con
 // búsqueda sobre el mismo listado de usuarios activos que ya usa el
 // selector de responsables de ModalTarea — api.getUsuariosAsignables()).
-export default function TableroModal({ open, tablero, onClose, onSaved }) {
+//
+// Administradores: al crear, el backend agrega a quien crea como miembro
+// administrador (no hace falta elegirse). Al editar, `miembros` es la lista
+// completa: los que siguen conservan su privilegio y los nuevos entran como
+// miembros comunes. Promover o quitar administradores se hace desde
+// VerMiembrosModal, no desde acá.
+export default function TableroModal({ open, tablero, user, onClose, onSaved }) {
   const isEdit = !!tablero
 
   const [nombre, setNombre]           = useState('')
   const [descripcion, setDescripcion] = useState('')
   const [miembros, setMiembros]       = useState([]) // array de usuario_id
-  const [busqueda, setBusqueda]       = useState('')
 
   const [usuarios, setUsuarios]           = useState([])
   const [loadingUsers, setLoadingUsers]   = useState(true)
@@ -35,7 +43,6 @@ export default function TableroModal({ open, tablero, onClose, onSaved }) {
     setNombre(tablero?.nombre ?? '')
     setDescripcion(tablero?.descripcion ?? '')
     setMiembros((tablero?.miembros ?? []).map(m => m.id))
-    setBusqueda('')
     setError(null)
     setLoadingUsers(true)
     document.body.style.overflow = 'hidden'
@@ -47,11 +54,24 @@ export default function TableroModal({ open, tablero, onClose, onSaved }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, tablero])
 
-  const usuariosFiltrados = useMemo(() => {
-    const q = busqueda.trim().toLowerCase()
-    if (!q) return usuarios
-    return usuarios.filter(u => u.nombre?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q))
-  }, [usuarios, busqueda])
+  const miembrosOriginales = (tablero?.miembros ?? []).map(m => m.id)
+  const adminIds = (tablero?.miembros ?? []).filter(m => m.es_admin).map(m => m.id)
+  // Administradores activos que siguen marcados: si queda uno solo, no se puede
+  // desmarcar (el backend respondería 409 por dejar el tablero sin administradores).
+  const adminsActivosMarcados = (tablero?.miembros ?? [])
+    .filter(m => m.es_admin && m.estado === 'Activo' && miembros.includes(m.id))
+    .map(m => m.id)
+  const creadorId = !isEdit ? user?.id : null
+
+  const bloqueados = isEdit
+    ? (adminsActivosMarcados.length === 1 ? adminsActivosMarcados : [])
+    : (creadorId ? [creadorId] : [])
+  const seleccionados = creadorId ? [...new Set([...miembros, creadorId])] : miembros
+  const etiqueta = (u) => {
+    if (u.id === creadorId) return 'Vos · administrador'
+    if (isEdit && adminIds.includes(u.id)) return 'Administrador'
+    return null
+  }
 
   const toggleMiembro = (id) => {
     setMiembros(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id])
@@ -63,8 +83,18 @@ export default function TableroModal({ open, tablero, onClose, onSaved }) {
     setSaving(true)
     setError(null)
     try {
-      const body = { nombre: nombre.trim(), descripcion: descripcion.trim() || null, miembros }
-      const res = isEdit ? await api.editarTablero(tablero.id, body) : await api.crearTablero(body)
+      const body = { nombre: nombre.trim(), descripcion: descripcion.trim() || null }
+      let res
+      if (isEdit) {
+        // La lista completa solo se manda si cambió: así guardar nombre o
+        // descripción no pisa altas/bajas que un administrador haya hecho mientras
+        // el modal estaba abierto.
+        if (!mismosIds(miembros, miembrosOriginales)) body.miembros = miembros
+        res = await api.editarTablero(tablero.id, body)
+      } else {
+        // El creador lo agrega el backend como administrador; no se manda duplicado.
+        res = await api.crearTablero({ ...body, miembros: miembros.filter(id => id !== creadorId) })
+      }
       onSaved(res)
     } catch (err) {
       setError(err.message || 'No se pudo guardar el tablero.')
@@ -105,34 +135,24 @@ export default function TableroModal({ open, tablero, onClose, onSaved }) {
 
             <div>
               <label className="block text-[12px] font-medium text-gray-600 mb-1.5">
-                Miembros {miembros.length > 0 && <span className="text-gray-400 font-normal">({miembros.length} seleccionados)</span>}
+                Miembros {seleccionados.length > 0 && <span className="text-gray-400 font-normal">({seleccionados.length} seleccionados)</span>}
               </label>
-              <div className="relative mb-2">
-                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
-                  placeholder="Buscar persona..." className={inputCls + ' pl-8 py-2 text-[13px]'} style={border} />
-              </div>
-              {loadingUsers ? (
-                <div className="flex items-center gap-2 text-gray-400 text-[13px] py-3">
-                  <RefreshCw size={12} className="animate-spin" /> Cargando usuarios…
-                </div>
-              ) : (
-                <div className="border rounded-xl max-h-[180px] overflow-y-auto divide-y" style={{ borderColor: 'rgba(15,110,86,0.15)' }}>
-                  {usuariosFiltrados.map(u => (
-                    <label key={u.id} className="flex items-center gap-2.5 px-3 py-2 text-[13px] text-gray-700 cursor-pointer hover:bg-gray-50">
-                      <input type="checkbox" checked={miembros.includes(u.id)} onChange={() => toggleMiembro(u.id)}
-                        className="w-4 h-4 flex-shrink-0 cursor-pointer" style={{ accentColor: '#0F6E56' }} />
-                      <span className="truncate">{u.nombre}</span>
-                      {u.estado && u.estado !== 'Activo' && <span className="text-gray-400 flex-shrink-0">(inactivo)</span>}
-                    </label>
-                  ))}
-                  {usuariosFiltrados.length === 0 && (
-                    <p className="text-[12.5px] text-gray-400 px-3 py-3">Sin resultados.</p>
-                  )}
-                </div>
-              )}
+              <UsuariosSelector
+                usuarios={usuarios}
+                loading={loadingUsers}
+                seleccionados={seleccionados}
+                onToggle={toggleMiembro}
+                bloqueados={bloqueados}
+                etiqueta={etiqueta}
+              />
+              <p className="flex items-start gap-1.5 text-[11.5px] text-gray-500 mt-2 leading-snug">
+                <ShieldCheck size={12} className="flex-shrink-0 mt-0.5" style={{ color: '#0F6E56' }} />
+                {isEdit
+                  ? 'Los nuevos miembros entran como miembros comunes. Los administradores se gestionan desde "Miembros del tablero".'
+                  : 'Quedás como administrador del tablero. El resto entra como miembro común.'}
+              </p>
               {isEdit && (
-                <p className="flex items-start gap-1.5 text-[11.5px] text-gray-500 mt-2 leading-snug">
+                <p className="flex items-start gap-1.5 text-[11.5px] text-gray-500 mt-1.5 leading-snug">
                   <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" style={{ color: '#D97706' }} />
                   Las tareas de las personas que quites conservan su responsable, pero esas personas dejarán de ver el tablero.
                 </p>

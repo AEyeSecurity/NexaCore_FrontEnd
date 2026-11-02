@@ -188,6 +188,11 @@ export const api = {
   getTableros:  ()         => request('/api/operations/tableros'),
   crearTablero: (body)     => request('/api/operations/tableros',      { method: 'POST',  body: JSON.stringify(body) }),
   editarTablero:(id, body) => request(`/api/operations/tableros/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  // Administración de miembros (administradores del tablero). Devuelven el tablero actualizado.
+  agregarMiembrosTablero:   (id, miembros)        => request(`/api/operations/tableros/${id}/miembros`,              { method: 'POST',   body: JSON.stringify({ miembros }) }),
+  cambiarAdminTablero:      (id, usuarioId, es_admin) => request(`/api/operations/tableros/${id}/miembros/${usuarioId}`, { method: 'PATCH',  body: JSON.stringify({ es_admin }) }),
+  quitarMiembroTablero:     (id, usuarioId)       => request(`/api/operations/tableros/${id}/miembros/${usuarioId}`, { method: 'DELETE' }),
+  regularizarAdminTablero:  (id, usuario_id)      => request(`/api/operations/tableros/${id}/regularizar-administrador`, { method: 'POST', body: JSON.stringify({ usuario_id }) }),
 
   getEtapas:    ()         => request('/api/operations/etapas'),
   crearEtapa:   (body)     => request('/api/operations/etapas',      { method: 'POST',  body: JSON.stringify(body) }),

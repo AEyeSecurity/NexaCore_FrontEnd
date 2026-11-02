@@ -1,14 +1,14 @@
 import {
   Briefcase, Plus, CheckCircle, Clock, AlertCircle, XCircle,
   Search, RefreshCw, Trash2, X, User, UserRound, Users, Calendar, Edit2, AlertTriangle,
-  Send, ThumbsUp, ThumbsDown, Inbox, History, Settings2, ChevronDown,
+  Send, ThumbsUp, ThumbsDown, Inbox, History, Settings2, ChevronDown, UserCog, ShieldAlert,
 } from 'lucide-react'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../../lib/api'
 import EtapasConfigModal from './EtapasConfigModal'
 import TableroModal from './TableroModal'
-import VerMiembrosModal from './VerMiembrosModal'
+import VerMiembrosModal, { mensajeErrorMiembros } from './VerMiembrosModal'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 // Las etapas del tablero (columnas) son 100% personalizables y vienen de
@@ -18,6 +18,13 @@ const TIPOS_CERRADOS = ['completada', 'cancelada', 'en_revision_cerrada']
 
 const PRIORIDADES  = ['Alta', 'Media', 'Baja']
 const ROLES_ADMIN  = ['Superadmin', 'Dirección']
+
+// Propuestas deshabilitadas por decisión del cliente. Todo su código (vista,
+// tarjetas, endpoints, formulario) se conserva: para volver a mostrarlas
+// alcanza con poner esto en true. Mientras esté en false no se muestra la
+// pestaña ni la vista, y las tareas nuevas se crean siempre como asignación
+// directa (si no, quedarían como propuestas que nadie puede ver ni aprobar).
+const ENABLE_PROPUESTAS = false
 
 // Varios tableros con miembros: cada uno tiene sus propias tareas y su
 // propia gente. Dirección/Superadmin ven y gestionan todos; el resto solo
@@ -160,6 +167,22 @@ function StatCard({ label, value, icon: Icon, color, onClick, active }) {
       {active && (
         <p className="text-[10.5px] font-medium mt-1" style={{ color }}>Filtro activo</p>
       )}
+    </div>
+  )
+}
+
+// ── Interruptor ───────────────────────────────────────────────────────────────
+function Interruptor({ label, activo, onChange }) {
+  return (
+    <div className="flex items-center gap-2.5 flex-shrink-0">
+      <span className="text-[12.5px] font-medium text-gray-600">{label}</span>
+      <button type="button" role="switch" aria-checked={activo} aria-label={label}
+        onClick={() => onChange(v => !v)}
+        className="relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors cursor-pointer"
+        style={{ background: activo ? '#0F6E56' : '#D1D5DB' }}>
+        <span className="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"
+          style={{ transform: activo ? 'translateX(18px)' : 'translateX(3px)' }} />
+      </button>
     </div>
   )
 }
@@ -482,8 +505,8 @@ function ModalTarea({ tarea, etapas, miembros, tableroId, onClose, onSaved, user
   const incluyeAlUsuario = user?.id
     ? asignadosIds.includes(user.id)
     : asignadosIds.some(id => nombreUsuario(id) === user?.name)
-  const modoEfectivo = adminUser
-    ? modo
+  const modoEfectivo = !ENABLE_PROPUESTAS ? 'asignacion'
+    : adminUser ? modo
     : (asignadosIds.length === 0 || incluyeAlUsuario) ? 'asignacion' : 'propuesta'
 
   useEffect(() => {
@@ -555,7 +578,7 @@ function ModalTarea({ tarea, etapas, miembros, tableroId, onClose, onSaved, user
           <div className="px-6 py-5 space-y-4">
 
             {/* Toggle asignar/proponer — solo para admins creando una tarea nueva */}
-            {!tarea && adminUser && (
+            {ENABLE_PROPUESTAS && !tarea && adminUser && (
               <div className="flex rounded-xl overflow-hidden border"
                 style={{ borderColor: 'rgba(15,110,86,0.2)' }}>
                 <button type="button" onClick={() => setModo('asignacion')}
@@ -965,6 +988,8 @@ export default function OperationsModule({ user }) {
   const [draggedTareaId, setDraggedTareaId] = useState(null)
 
   const [vista, setVista] = useState('kanban')
+  // Con Propuestas deshabilitado, ningún estado previo puede mostrar esa vista.
+  const vistaActiva = ENABLE_PROPUESTAS ? vista : 'kanban'
 
   const [search,            setSearch]            = useState('')
   const [filtroPrioridad,   setFiltroPrioridad]   = useState('Todos')
@@ -988,13 +1013,18 @@ export default function OperationsModule({ user }) {
   })
   const [tableroModalOpen, setTableroModalOpen] = useState(false)
   const [tableroEditando,  setTableroEditando]  = useState(null) // null = crear
-  const [verMiembrosOpen,  setVerMiembrosOpen]  = useState(false)
+  // id del tablero cuyos miembros se están viendo; null = modal cerrado
+  const [miembrosTableroId, setMiembrosTableroId] = useState(null)
+  // Filtros del backend (solo_mias / solo_abiertas): se aplican al listado y a
+  // las métricas por igual, y se combinan entre sí (AND).
   const [soloMisTareas,    setSoloMisTareas]    = useState(false)
+  const [soloAbiertas,     setSoloAbiertas]     = useState(false)
 
+  // tipo: 'aviso' | 'ok' | 'error'
   const [aviso, setAviso] = useState(null)
   const avisoTimer = useRef(null)
-  const showAviso = useCallback((message) => {
-    setAviso(message)
+  const showAviso = useCallback((message, tipo = 'aviso') => {
+    setAviso({ message, tipo })
     clearTimeout(avisoTimer.current)
     avisoTimer.current = setTimeout(() => setAviso(null), 4000)
   }, [])
@@ -1002,8 +1032,10 @@ export default function OperationsModule({ user }) {
 
   const adminUser = esAdmin(user)
 
-  const cargarTableros = useCallback(async () => {
-    setTablerosLoading(true)
+  // `silencioso`: refresca sin reemplazar las pestañas por "Cargando…" (lo usan
+  // las operaciones de miembros, para no hacer parpadear la pantalla).
+  const cargarTableros = useCallback(async ({ silencioso = false } = {}) => {
+    if (!silencioso) setTablerosLoading(true)
     setTablerosError(null)
     try {
       const res = await api.getTableros()
@@ -1044,15 +1076,25 @@ export default function OperationsModule({ user }) {
     }
     setLoading(true)
     setError(null)
+    // "Solo mis tareas" y "Solo tareas abiertas" los resuelve el backend, con los
+    // mismos parámetros para el listado y las métricas: así columnas, tarjetas y
+    // métricas cuentan lo mismo. La clasificación abierta/cerrada es del backend.
+    const filtrosBackend = {
+      ...(soloMisTareas ? { solo_mias: true } : {}),
+      ...(soloAbiertas  ? { solo_abiertas: true } : {}),
+    }
     const [rTareas, rPropuestas, rEtapas, rMetricas] = await Promise.allSettled([
-      // Admins: filtro por persona en backend (asignado_id). Usuarios comunes ya
-      // reciben solo sus tareas; el filtro por id se aplica sobre esa lista.
-      adminUser
-        ? api.getTareas({ tablero_id: tableroActivoId, ...(filtroResponsable ? { asignado_id: filtroResponsable } : {}) })
-        : fetchPropias(api.getTareas, user, { tablero_id: tableroActivoId }),
-      fetchPropias(api.getPropuestas, user, { tablero_id: tableroActivoId }),
+      // Filtro por responsable también en backend (asignado_id); se combina con el resto.
+      api.getTareas({
+        tablero_id: tableroActivoId,
+        ...(filtroResponsable ? { asignado_id: filtroResponsable } : {}),
+        ...filtrosBackend,
+      }),
+      ENABLE_PROPUESTAS
+        ? fetchPropias(api.getPropuestas, user, { tablero_id: tableroActivoId })
+        : Promise.resolve({ data: [] }),
       api.getEtapas(),
-      api.getMetricasOperations({ tablero_id: tableroActivoId, ...(soloMisTareas ? { solo_mias: true } : {}) }),
+      api.getMetricasOperations({ tablero_id: tableroActivoId, ...filtrosBackend }),
     ])
     if (carga !== cargaActual.current) return
 
@@ -1079,7 +1121,7 @@ export default function OperationsModule({ user }) {
     if (rEtapas.status === 'fulfilled') setEtapas(rEtapas.value.data || [])
     if (rMetricas.status === 'fulfilled') setMetricas(rMetricas.value)
     setLoading(false)
-  }, [adminUser, user, filtroResponsable, tableroActivoId, soloMisTareas, cargarTableros, showAviso])
+  }, [user, filtroResponsable, tableroActivoId, soloMisTareas, soloAbiertas, cargarTableros, showAviso])
 
   useEffect(() => { cargar() }, [cargar])
 
@@ -1089,6 +1131,26 @@ export default function OperationsModule({ user }) {
     setTableroModalOpen(false)
     seleccionarTablero(guardado.id)
     cargarTableros()
+  }
+
+  // ── Miembros del tablero ──────────────────────────────────────────────
+  // Las operaciones devuelven el tablero actualizado (miembros + permisos): se
+  // aplica enseguida y después se refrescan los tableros sin tocar el tablero
+  // activo ni los filtros (si el usuario se quitó a sí mismo y dejó de verlo,
+  // cargarTableros cae al primero disponible).
+  const miembrosTablero = tableros.find(t => t.id === miembrosTableroId) || null
+  const handleMiembrosActualizado = (actualizado, mensaje) => {
+    if (actualizado?.id) {
+      setTableros(prev => prev.map(t => (t.id === actualizado.id ? { ...t, ...actualizado } : t)))
+    }
+    if (mensaje) showAviso(mensaje, 'ok')
+    cargarTableros({ silencioso: true })
+  }
+  const handleMiembrosError = (err) => {
+    showAviso(mensajeErrorMiembros(err), 'error')
+    // 403/404/409: los permisos o los miembros cambiaron por otro lado; se
+    // refresca para que el modal muestre el estado real.
+    if ([403, 404, 409].includes(err?.status)) cargarTableros({ silencioso: true })
   }
 
   const handleCambiarEtapa = async (id, nuevaEtapaId) => {
@@ -1194,7 +1256,7 @@ export default function OperationsModule({ user }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {adminUser && tableroActivo && (
+          {tableroActivo?.permisos?.puede_editar_tablero && (
             <button onClick={abrirEditarTablero} className={btnSecondary}
               style={{ borderColor: 'rgba(15,110,86,0.2)' }} title="Editar tablero">
               <Edit2 size={14} /> Editar tablero
@@ -1223,49 +1285,54 @@ export default function OperationsModule({ user }) {
             <Briefcase size={24} style={{ color: '#0F6E56' }} />
           </div>
           <p className="font-serif text-[16px] font-semibold text-gray-800 mb-1">Todavía no sos miembro de ningún tablero.</p>
-          <p className="text-[13px] text-gray-500">Pedile a Dirección o Superadmin que te agregue a uno.</p>
+          <p className="text-[13px] text-gray-500">Pedile a un administrador de tablero, a Dirección o a Superadmin que te agregue a uno.</p>
         </div>
       )}
 
       {tableroActivo && (
         <>
-          {/* ── Miembros del tablero + "Solo mis tareas" ── */}
+          {/* ── Miembros del tablero + "Solo mis tareas" / "Solo tareas abiertas" ── */}
           <div className="bg-white rounded-xl border shadow-sm p-3.5 flex items-center justify-between gap-4 flex-wrap"
             style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
             <div className="flex items-center gap-3 min-w-0 flex-wrap">
-              <div className="flex -space-x-2 flex-shrink-0">
-                {tableroActivo.miembros.slice(0, 5).map((m, i) => (
-                  <div key={m.id} title={m.nombre}
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-[10.5px] font-bold text-white border-2 border-white flex-shrink-0"
-                    style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>
-                    {(m.nombre || '?').trim().slice(0, 1).toUpperCase()}
-                  </div>
-                ))}
-                {tableroActivo.miembros.length > 5 && (
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-gray-600 bg-gray-200 border-2 border-white flex-shrink-0">
-                    +{tableroActivo.miembros.length - 5}
-                  </div>
-                )}
-              </div>
-              <p className="text-[12.5px] text-gray-500">
-                {tableroActivo.miembros.length} {tableroActivo.miembros.length === 1 ? 'miembro ve' : 'miembros ven'} este tablero
-              </p>
-              {!adminUser && (
-                <button onClick={() => setVerMiembrosOpen(true)}
-                  className="flex items-center gap-1.5 text-[12.5px] font-semibold flex-shrink-0" style={{ color: '#0F6E56' }}>
-                  <Users size={13} /> Ver miembros
+              {/* Avatares + contador: abren los miembros del tablero */}
+              <button type="button" onClick={() => setMiembrosTableroId(tableroActivo.id)}
+                className="flex items-center gap-3 min-w-0 rounded-lg -m-1 p-1 hover:bg-gray-50 transition-colors" title="Ver miembros">
+                <div className="flex -space-x-2 flex-shrink-0">
+                  {tableroActivo.miembros.slice(0, 5).map((m, i) => (
+                    <div key={m.id} title={m.es_admin ? `${m.nombre} · Administrador` : m.nombre}
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-[10.5px] font-bold text-white border-2 border-white flex-shrink-0"
+                      style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>
+                      {(m.nombre || '?').trim().slice(0, 1).toUpperCase()}
+                    </div>
+                  ))}
+                  {tableroActivo.miembros.length > 5 && (
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-gray-600 bg-gray-200 border-2 border-white flex-shrink-0">
+                      +{tableroActivo.miembros.length - 5}
+                    </div>
+                  )}
+                </div>
+                <p className="text-[12.5px] text-gray-500 text-left">
+                  {tableroActivo.miembros.length} {tableroActivo.miembros.length === 1 ? 'miembro ve' : 'miembros ven'} este tablero
+                </p>
+              </button>
+              <button onClick={() => setMiembrosTableroId(tableroActivo.id)}
+                className="flex items-center gap-1.5 text-[12.5px] font-semibold flex-shrink-0" style={{ color: '#0F6E56' }}>
+                {tableroActivo.permisos?.puede_agregar_miembros || tableroActivo.permisos?.puede_administrar_permisos
+                  ? <><UserCog size={13} /> Gestionar miembros</>
+                  : <><Users size={13} /> Ver miembros</>}
+              </button>
+              {tableroActivo.permisos?.puede_regularizar_admin && (
+                <button onClick={() => setMiembrosTableroId(tableroActivo.id)}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold flex-shrink-0"
+                  style={{ background: '#FEF3C7', color: '#92400E' }} title="Designar un administrador para este tablero">
+                  <ShieldAlert size={11} /> Sin administrador
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-2.5 flex-shrink-0">
-              <span className="text-[12.5px] font-medium text-gray-600">Solo mis tareas</span>
-              <button type="button" role="switch" aria-checked={soloMisTareas}
-                onClick={() => setSoloMisTareas(v => !v)}
-                className="relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors cursor-pointer"
-                style={{ background: soloMisTareas ? '#0F6E56' : '#D1D5DB' }}>
-                <span className="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"
-                  style={{ transform: soloMisTareas ? 'translateX(18px)' : 'translateX(3px)' }} />
-              </button>
+            <div className="flex items-center gap-x-5 gap-y-2 flex-wrap">
+              <Interruptor label="Solo mis tareas"      activo={soloMisTareas} onChange={setSoloMisTareas} />
+              <Interruptor label="Solo tareas abiertas" activo={soloAbiertas}  onChange={setSoloAbiertas} />
             </div>
           </div>
 
@@ -1278,8 +1345,14 @@ export default function OperationsModule({ user }) {
             <StatCard label="Vencidas"     value={loading ? '—' : (metricas?.vencidas ?? 0)} icon={AlertTriangle} color="#DC2626"
               onClick={() => setFiltroVencidas(v => !v)} active={filtroVencidas} />
           </div>
+          {(search || filtroPrioridad !== 'Todos' || filtroResponsable) && (
+            <p className="text-[11.5px] text-gray-400 -mt-3">
+              Las métricas no consideran la búsqueda, la prioridad ni el responsable: esos filtros solo aplican a las tarjetas.
+            </p>
+          )}
 
-          {/* ── Tabs: Tablero / Propuestas ── */}
+          {/* ── Tabs: Tablero / Propuestas — con Propuestas deshabilitado, una sola vista sin selector ── */}
+          {ENABLE_PROPUESTAS && (
           <div className="flex gap-1 bg-white rounded-xl p-1 shadow-sm border w-fit"
             style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
             {[
@@ -1305,14 +1378,15 @@ export default function OperationsModule({ user }) {
               )
             })}
           </div>
+          )}
 
           {/* ── Vista: Propuestas ── */}
-          {vista === 'propuestas' && (
+          {vistaActiva === 'propuestas' && (
             <PropuestasView user={user} tableroId={tableroActivoId} onKanbanRefresh={cargar} />
           )}
 
           {/* ── Vista: Tablero Kanban ── */}
-          {vista === 'kanban' && (
+          {vistaActiva === 'kanban' && (
             <>
           {/* Filtros */}
           <div className="bg-white rounded-xl border shadow-sm p-4 space-y-2"
@@ -1490,24 +1564,32 @@ export default function OperationsModule({ user }) {
       <TableroModal
         open={tableroModalOpen}
         tablero={tableroEditando}
+        user={user}
         onClose={() => setTableroModalOpen(false)}
         onSaved={handleTableroGuardado}
       />
 
-      {/* ── Ver miembros del tablero — solo lectura ── */}
-      {verMiembrosOpen && tableroActivo && (
+      {/* ── Miembros del tablero: lectura para todos, acciones según permisos ── */}
+      {miembrosTablero && (
         <VerMiembrosModal
-          tablero={tableroActivo}
-          onClose={() => setVerMiembrosOpen(false)}
+          tablero={miembrosTablero}
+          user={user}
+          onClose={() => setMiembrosTableroId(null)}
+          onActualizado={handleMiembrosActualizado}
+          onError={handleMiembrosError}
         />
       )}
 
-      {/* ── Aviso breve (ej. se perdió acceso al tablero activo) ── */}
+      {/* ── Aviso breve (operaciones de miembros, o se perdió acceso al tablero activo) ── */}
       {aviso && (
-        <div className="fixed bottom-6 right-6 flex items-center gap-2 text-white text-[13px] font-medium px-4 py-3 rounded-xl shadow-lg z-[60]"
+        <div className="fixed bottom-6 right-6 flex items-center gap-2 text-white text-[13px] font-medium px-4 py-3 rounded-xl shadow-lg z-[60] max-w-[calc(100vw-3rem)]"
           style={{ background: '#04342C' }}>
-          <AlertTriangle size={15} style={{ color: '#FCD34D' }} />
-          {aviso}
+          {aviso.tipo === 'ok'
+            ? <CheckCircle size={15} className="flex-shrink-0" style={{ color: '#6EE7B7' }} />
+            : aviso.tipo === 'error'
+              ? <XCircle size={15} className="flex-shrink-0" style={{ color: '#FCA5A5' }} />
+              : <AlertTriangle size={15} className="flex-shrink-0" style={{ color: '#FCD34D' }} />}
+          {aviso.message}
         </div>
       )}
 
