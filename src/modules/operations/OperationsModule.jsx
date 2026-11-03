@@ -146,17 +146,39 @@ function ResponsablesLinea({ tarea, prefijo }) {
   )
 }
 
+// Bloquea el scroll de la página mientras haya al menos un modal abierto. Con un
+// contador, cerrar un modal apilado (ej. editar una tarea desde el historial de
+// finalizadas) no libera el fondo mientras el de abajo siga abierto.
+let modalesAbiertos = 0
+function useBloqueoScroll() {
+  useEffect(() => {
+    modalesAbiertos++
+    document.body.style.overflow = 'hidden'
+    return () => {
+      modalesAbiertos--
+      if (modalesAbiertos === 0) document.body.style.overflow = ''
+    }
+  }, [])
+}
+
 // ── StatCard ──────────────────────────────────────────────────────────────────
-function StatCard({ label, value, icon: Icon, color, onClick, active }) {
+// `hint`: texto discreto bajo el valor que indica que la tarjeta es un acceso
+// (ej. "Ver historial"). `title`: aclaración al pasar el mouse.
+function StatCard({ label, value, icon: Icon, color, onClick, active, hint, title }) {
   return (
     <div
-      className="bg-white rounded-xl p-5 border shadow-sm transition-all"
+      className={'bg-white rounded-xl p-5 border shadow-sm transition-all' + (onClick ? ' hover:shadow-md' : '')}
       style={{
         borderColor: active ? color : 'rgba(15,110,86,0.1)',
         boxShadow:   active ? `0 0 0 2px ${color}40` : undefined,
         cursor:      onClick ? 'pointer' : 'default',
       }}
       onClick={onClick}
+      title={title}
+      {...(onClick ? {
+        role: 'button', tabIndex: 0,
+        onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } },
+      } : {})}
     >
       <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3"
         style={{ background: color + '18' }}>
@@ -164,8 +186,12 @@ function StatCard({ label, value, icon: Icon, color, onClick, active }) {
       </div>
       <p className="text-[12.5px] text-gray-500">{label}</p>
       <p className="text-[22px] font-semibold text-gray-900">{value}</p>
-      {active && (
+      {active ? (
         <p className="text-[10.5px] font-medium mt-1" style={{ color }}>Filtro activo</p>
+      ) : hint && (
+        <p className="flex items-center gap-1 text-[10.5px] font-medium mt-1" style={{ color }}>
+          <History size={10} /> {hint}
+        </p>
       )}
     </div>
   )
@@ -195,13 +221,13 @@ function ModalHistorial({ tarea, onClose }) {
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState(null)
 
+  useBloqueoScroll()
+
   useEffect(() => {
-    document.body.style.overflow = 'hidden'
     api.getHistorialTarea(tarea.id)
       .then(r => setHistorial(r.data))
       .catch(e => setError(e.message || 'Error al cargar el historial'))
       .finally(() => setLoading(false))
-    return () => { document.body.style.overflow = '' }
   }, [tarea.id])
 
   // Etiquetas legibles para cada tipo de acción registrada en tarea_historial.accion
@@ -449,6 +475,183 @@ function TareaCard({ tarea, etapas, onEditar, onEliminar, onCambiarEtapa, onHist
   )
 }
 
+// ── ModalFinalizadas ──────────────────────────────────────────────────────────
+// Historial de tareas completadas o canceladas de un tablero, sin límite de
+// antigüedad (el Kanban solo muestra las finalizadas en los últimos 7 días).
+// Qué es final lo decide el backend (vista=historial). Completadas/canceladas se
+// separan por operativo_etapas.tipo_base, la misma clave con la que
+// /tareas/metricas arma porTipoBase: así la lista coincide con el número del
+// mosaico. No se usa `estado`: si se cambia el tipo_base de una etapa, el
+// backend no resincroniza tareas.estado y quedaría desfasado. Las tareas finales
+// sin etapa (el backend las clasifica por estado) no entran en el mosaico: se
+// muestran aparte, sin ocultarlas. `soloMias` respeta el interruptor del
+// tablero, igual que el mosaico. `version` cambia al editar una tarea desde acá.
+const FINALIZADAS_CFG = {
+  completada: { estado: 'Completada', titulo: 'Tareas completadas', fecha: 'Completada el', color: '#1D9E75', icon: CheckCircle },
+  cancelada:  { estado: 'Cancelada',  titulo: 'Tareas canceladas',  fecha: 'Cancelada el',  color: '#6B7280', icon: XCircle     },
+}
+
+function fmtFinalizacion(iso) {
+  const fecha = new Date(iso)
+  if (Number.isNaN(fecha.getTime())) return null
+  return fecha.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function ModalFinalizadas({ tipo, tableroId, soloMias, version, onClose, onEditar, onHistorial }) {
+  const cfg = FINALIZADAS_CFG[tipo]
+  const [tareas,  setTareas]  = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error,   setError]   = useState(null)
+  const [search,  setSearch]  = useState('')
+
+  useBloqueoScroll()
+
+  useEffect(() => {
+    let vigente = true
+    setLoading(true)
+    setError(null)
+    api.getTareas({ tablero_id: tableroId, vista: 'historial', ...(soloMias ? { solo_mias: true } : {}) })
+      .then(r => { if (vigente) setTareas(r.data ?? []) })
+      .catch(e => { if (vigente) setError(e?.message || 'No se pudo cargar el historial') })
+      .finally(() => { if (vigente) setLoading(false) })
+    return () => { vigente = false }
+  }, [tableroId, soloMias, version])
+
+  const delTipo  = tareas.filter(t => t.operativo_etapas?.tipo_base === tipo)
+  const sinEtapa = tareas.filter(t => !t.operativo_etapas && t.estado === cfg.estado)
+
+  // Más recientes primero; las que no tienen fecha confiable, al final.
+  const q = search.trim().toLowerCase()
+  const filtrarOrdenar = (lista) => lista
+    .filter(t => !q || t.titulo?.toLowerCase().includes(q) || t.descripcion?.toLowerCase().includes(q))
+    .sort((a, b) => {
+      if (!a.fecha_finalizacion && !b.fecha_finalizacion) return (b.created_at ?? '').localeCompare(a.created_at ?? '')
+      if (!a.fecha_finalizacion) return 1
+      if (!b.fecha_finalizacion) return -1
+      return b.fecha_finalizacion.localeCompare(a.fecha_finalizacion)
+    })
+  const visibles         = filtrarOrdenar(delTipo)
+  const visiblesSinEtapa = filtrarOrdenar(sinEtapa)
+
+  const Icon = cfg.icon
+
+  const renderTarea = (t) => {
+    const prioCfg = PRIORIDAD_CFG[t.prioridad] || { background: '#F3F4F6', color: '#4B5563' }
+    const fecha = t.fecha_finalizacion ? fmtFinalizacion(t.fecha_finalizacion) : null
+    return (
+      <div key={t.id} className="rounded-xl border p-4 space-y-2"
+        style={{ borderColor: 'rgba(15,110,86,0.12)' }}>
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-semibold text-gray-800 text-[13.5px] leading-snug flex-1">{t.titulo}</p>
+          <div className="flex gap-1 shrink-0">
+            <button onClick={() => onHistorial(t)}
+              className="p-1 rounded-lg text-gray-300 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="Historial">
+              <History size={12} />
+            </button>
+            <button onClick={() => onEditar(t)}
+              className="p-1 rounded-lg text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors" title="Ver / editar">
+              <Edit2 size={12} />
+            </button>
+          </div>
+        </div>
+        {t.descripcion && (
+          <p className="text-[12px] text-gray-500 leading-relaxed line-clamp-2">{t.descripcion}</p>
+        )}
+        <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap">
+          {t.prioridad && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium" style={prioCfg}>
+              {t.prioridad}
+            </span>
+          )}
+          <span className="flex items-center gap-1.5 text-[11.5px]" style={{ color: fecha ? '#6B7280' : '#9CA3AF' }}>
+            <Calendar size={11} className="shrink-0" />
+            {fecha ? `${cfg.fecha} ${fecha}` : <span className="italic">Fecha no registrada</span>}
+          </span>
+        </div>
+        <ResponsablesLinea tarea={t} />
+      </div>
+    )
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg fade-in flex flex-col"
+        style={{ maxHeight: '85vh' }}>
+
+        <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0"
+          style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <Icon size={15} style={{ color: cfg.color }} className="shrink-0" />
+              <h3 className="font-serif font-semibold text-gray-900 text-[16px]">{cfg.titulo}</h3>
+            </div>
+            <p className="text-[11.5px] text-gray-400 mt-0.5">
+              Historial completo{soloMias ? ' · solo mis tareas' : ''}
+            </p>
+          </div>
+          <button type="button" onClick={onClose}
+            className="ml-3 p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0">
+            <X size={15} />
+          </button>
+        </div>
+
+        <div className="px-6 pt-4 flex-shrink-0">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar por título o descripción..."
+              className={inputCls + ' pl-9'} style={{ borderColor: 'rgba(15,110,86,0.2)' }} />
+          </div>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-6 py-4">
+          {loading ? (
+            <div className="flex items-center justify-center h-32 text-gray-400 text-[13.5px]">
+              <RefreshCw size={16} className="animate-spin mr-2" /> Cargando…
+            </div>
+          ) : error ? (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-[13px] text-red-700">{error}</div>
+          ) : visibles.length === 0 && visiblesSinEtapa.length === 0 ? (
+            <div className="text-center py-10">
+              <Icon size={28} className="mx-auto mb-3 text-gray-300" />
+              <p className="text-[13.5px] font-medium text-gray-500">{q ? 'Sin resultados' : 'Sin tareas'}</p>
+              <p className="text-[12px] text-gray-400 mt-1">
+                {q ? 'Ninguna tarea coincide con la búsqueda.' : `Todavía no hay ${cfg.titulo.toLowerCase()} en este tablero.`}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {visibles.length > 0 && (
+                <div className="space-y-3">{visibles.map(renderTarea)}</div>
+              )}
+              {visiblesSinEtapa.length > 0 && (
+                <div>
+                  <p className="text-[12px] font-semibold text-gray-400 uppercase tracking-wider">
+                    Sin etapa asignada ({visiblesSinEtapa.length})
+                  </p>
+                  <p className="text-[11.5px] text-gray-400 mt-0.5 mb-3">
+                    Tareas antiguas con estado {cfg.estado} y sin etapa del tablero: no se cuentan en el mosaico.
+                  </p>
+                  <div className="space-y-3">{visiblesSinEtapa.map(renderTarea)}</div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {!loading && !error && delTipo.length > 0 && (
+          <div className="px-6 py-3 border-t flex-shrink-0" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
+            <p className="text-[11.5px] text-gray-400 text-center">
+              {q ? `${visibles.length} de ${delTipo.length}` : delTipo.length} {delTipo.length === 1 ? 'tarea' : 'tareas'} · más recientes primero
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  , document.body)
+}
+
 // ── ModalTarea ────────────────────────────────────────────────────────────────
 // `miembros`: gente del tablero activo (fuente de responsables posibles).
 // `tableroId`: se manda como tablero_id solo al crear — una tarea no puede
@@ -509,10 +712,7 @@ function ModalTarea({ tarea, etapas, miembros, tableroId, onClose, onSaved, user
     : adminUser ? modo
     : (asignadosIds.length === 0 || incluyeAlUsuario) ? 'asignacion' : 'propuesta'
 
-  useEffect(() => {
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = '' }
-  }, [])
+  useBloqueoScroll()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -1003,6 +1203,9 @@ export default function OperationsModule({ user }) {
   const [confirmDelete,  setConfirmDelete]  = useState(null)
   // tarea seleccionada para ver su historial; null = modal cerrado
   const [tareaHistorial, setTareaHistorial] = useState(null)
+  // historial de finalizadas: 'completada' | 'cancelada' | null = cerrado
+  const [finalizadasTipo,    setFinalizadasTipo]    = useState(null)
+  const [finalizadasVersion, setFinalizadasVersion] = useState(0)
 
   // ── Tableros ──────────────────────────────────────────────────────────
   const [tableros,        setTableros]        = useState([])
@@ -1065,6 +1268,9 @@ export default function OperationsModule({ user }) {
 
   const tableroActivo = tableros.find(t => t.id === tableroActivoId) || null
 
+  // El historial de finalizadas es del tablero activo: si cambia, se cierra.
+  useEffect(() => { setFinalizadasTipo(null) }, [tableroActivoId])
+
   // Cambiar de tablero o de filtro recarga: solo se aplica la respuesta más reciente.
   const cargaActual = useRef(0)
 
@@ -1085,8 +1291,11 @@ export default function OperationsModule({ user }) {
     }
     const [rTareas, rPropuestas, rEtapas, rMetricas] = await Promise.allSettled([
       // Filtro por responsable también en backend (asignado_id); se combina con el resto.
+      // vista=kanban: el backend oculta las completadas/canceladas hace 7 días o
+      // más (siguen en el historial, ver ModalFinalizadas).
       api.getTareas({
         tablero_id: tableroActivoId,
+        vista: 'kanban',
         ...(filtroResponsable ? { asignado_id: filtroResponsable } : {}),
         ...filtrosBackend,
       }),
@@ -1337,11 +1546,21 @@ export default function OperationsModule({ user }) {
           </div>
 
           {/* ── Métricas ── */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          {/* Completadas / Canceladas: totales históricos (métricas) y acceso al
+              historial. Con "Solo tareas abiertas" no hay finalizadas que mostrar. */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             <StatCard label="Total tareas" value={metricas?.total                       ?? '—'} icon={Briefcase}     color="#6366F1" />
             <StatCard label="Pendientes"   value={metricas?.porTipoBase?.pendiente      ?? '—'} icon={AlertCircle}   color="#EF9F27" />
             <StatCard label="En proceso"   value={metricas?.porTipoBase?.en_curso       ?? '—'} icon={Clock}         color="#0EA5E9" />
-            <StatCard label="Completadas"  value={metricas?.porTipoBase?.completada     ?? '—'} icon={CheckCircle}   color="#1D9E75" />
+            {['completada', 'cancelada'].map(tipo => (
+              <StatCard key={tipo}
+                label={tipo === 'completada' ? 'Completadas' : 'Canceladas'}
+                value={metricas?.porTipoBase?.[tipo] ?? '—'}
+                icon={FINALIZADAS_CFG[tipo].icon} color={FINALIZADAS_CFG[tipo].color}
+                {...(soloAbiertas
+                  ? { title: 'Desactivá "Solo tareas abiertas" para ver el historial' }
+                  : { onClick: () => setFinalizadasTipo(tipo), hint: 'Ver historial', title: 'Incluye las finalizadas hace más de 7 días' })} />
+            ))}
             <StatCard label="Vencidas"     value={loading ? '—' : (metricas?.vencidas ?? 0)} icon={AlertTriangle} color="#DC2626"
               onClick={() => setFiltroVencidas(v => !v)} active={filtroVencidas} />
           </div>
@@ -1548,7 +1767,7 @@ export default function OperationsModule({ user }) {
           tableroId={tableroActivoId}
           user={user}
           onClose={cerrarModal}
-          onSaved={() => { cerrarModal(); cargar() }}
+          onSaved={() => { cerrarModal(); cargar(); setFinalizadasVersion(v => v + 1) }}
         />
       )}
 
@@ -1591,6 +1810,19 @@ export default function OperationsModule({ user }) {
               : <AlertTriangle size={15} className="flex-shrink-0" style={{ color: '#FCD34D' }} />}
           {aviso.message}
         </div>
+      )}
+
+      {/* ── Historial de completadas / canceladas ── */}
+      {finalizadasTipo && tableroActivoId && !soloAbiertas && (
+        <ModalFinalizadas
+          tipo={finalizadasTipo}
+          tableroId={tableroActivoId}
+          soloMias={soloMisTareas}
+          version={finalizadasVersion}
+          onClose={() => setFinalizadasTipo(null)}
+          onEditar={abrirEditar}
+          onHistorial={setTareaHistorial}
+        />
       )}
 
       {/* ── Modal historial de cambios — solo lectura ── */}
