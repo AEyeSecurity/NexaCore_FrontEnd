@@ -215,6 +215,15 @@ export const api = {
   editarTarea:  (id, body) => request(`/api/operations/tareas/${id}`, { method: 'PUT',    body: JSON.stringify(body) }),
   eliminarTarea:(id)       => request(`/api/operations/tareas/${id}`, { method: 'DELETE' }),
   getHistorialTarea: (id)  => request(`/api/operations/tareas/${id}/historial`),
+  getActualizacionesTarea: (id) => request(`/api/operations/tareas/${id}/actualizaciones`),
+  getComentariosTarea: (id) => request(`/api/operations/tareas/${id}/comentarios`),
+  crearComentarioTarea: (id, contenido) => request(`/api/operations/tareas/${id}/comentarios`, { method: 'POST', body: JSON.stringify({ contenido }) }),
+  editarComentarioTarea: (id, comentarioId, contenido) => request(`/api/operations/tareas/${id}/comentarios/${comentarioId}`, { method: 'PATCH', body: JSON.stringify({ contenido }) }),
+  eliminarComentarioTarea: (id, comentarioId) => request(`/api/operations/tareas/${id}/comentarios/${comentarioId}`, { method: 'DELETE' }),
+  getTemporizadorTarea: (id) => request(`/api/operations/tareas/${id}/temporizador`),
+  iniciarTemporizadorTarea: (id) => request(`/api/operations/tareas/${id}/temporizador/iniciar`, { method: 'POST' }),
+  detenerTemporizadorTarea: (id) => request(`/api/operations/tareas/${id}/temporizador/detener`, { method: 'POST' }),
+
 
   getPropuestas: (params = {}) => {
     const qs = new URLSearchParams(

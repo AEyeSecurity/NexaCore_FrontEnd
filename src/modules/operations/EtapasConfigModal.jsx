@@ -260,7 +260,7 @@ export default function EtapasConfigModal({ open, etapas, onClose, onChanged }) 
         <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0"
           style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
           <div>
-            <h3 className="font-serif font-semibold text-gray-900 text-[16px]">Configurar etapas</h3>
+            <h3 className="font-sans font-semibold text-gray-900 text-[16px]">Configurar etapas</h3>
             <p className="text-[11.5px] text-gray-400 mt-0.5">Columnas del tablero — nombre, color, orden y tipo</p>
           </div>
           <button type="button" onClick={onClose}

@@ -78,7 +78,7 @@ export default function ContactoFormModal({ contacto, onClose, onSaved }) {
         className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b"
         style={{ borderColor: 'rgba(15,110,86,0.1)' }}
       >
-        <h2 className="font-serif font-semibold text-gray-900 text-[16px]">
+        <h2 className="font-sans font-semibold text-gray-900 text-[16px]">
           {isEdit ? 'Editar contacto' : 'Nuevo contacto'}
         </h2>
         <button

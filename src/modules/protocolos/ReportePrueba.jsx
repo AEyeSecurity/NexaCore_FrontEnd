@@ -52,7 +52,7 @@ export default function ReportePrueba({ pruebaId, onBack }) {
       <div id="protocolo-print-area" className="space-y-4">
         <div className="bg-white rounded-2xl border p-6 flex flex-wrap items-start justify-between gap-4" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
           <div>
-            <h2 className="font-serif text-[20px] font-semibold text-gray-900">{protocoloNombre}</h2>
+            <h2 className="font-sans text-[20px] font-semibold text-gray-900">{protocoloNombre}</h2>
             <p className="text-[13px] text-gray-500 mt-1">
               Reporte del registro realizado el {formatFecha(prueba.fecha)} por {prueba.realizado_por || 'responsable no especificado'}
             </p>
@@ -65,7 +65,7 @@ export default function ReportePrueba({ pruebaId, onBack }) {
         </div>
 
         <div className="bg-white rounded-2xl border p-6" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
-          <h4 className="font-serif font-semibold text-gray-900 text-[15px] mb-4">Resultados del checklist</h4>
+          <h4 className="font-sans font-semibold text-gray-900 text-[15px] mb-4">Resultados del checklist</h4>
           <div className="divide-y" style={{ borderColor: '#f0f1f0' }}>
             {resultados.map((r, i) => {
               const Icon = ESTADO_ICON[r.estado] ?? MinusCircle

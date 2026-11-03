@@ -60,7 +60,7 @@ function ConfirmarEliminacion({ titulo, confirmLabel, eliminar, mensajeError, on
         <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: '#FEE2E2' }}>
           <Trash2 size={18} style={{ color: '#B91C1C' }} />
         </div>
-        <h3 className="font-serif text-[17px] font-semibold text-gray-900">{titulo}</h3>
+        <h3 className="font-sans text-[17px] font-semibold text-gray-900">{titulo}</h3>
         {children}
         {error && (
           <div className="flex items-start gap-1.5 text-[12.5px] text-red-600 mt-3">
@@ -91,7 +91,7 @@ function ActionItemsModal({ prueba, onClose }) {
     <AppModal onClose={onClose} maxWidth="max-w-md">
       <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
         <div>
-          <h2 className="font-serif font-semibold text-gray-900 text-[16px]">Action Items</h2>
+          <h2 className="font-sans font-semibold text-gray-900 text-[16px]">Action Items</h2>
           <p className="text-[12px] text-gray-400 mt-0.5">Registro del {formatFecha(prueba.fecha)}</p>
         </div>
         <button onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
@@ -171,7 +171,7 @@ export default function ProtocolosDetail({ protocoloId, user, onBack, onOpenPrue
             style={CATEGORIA_BADGE[protocolo.categoria]}>
             {CATEGORIA_LABELS[protocolo.categoria] ?? protocolo.categoria}
           </span>
-          <h2 className="font-serif text-[21px] font-semibold text-gray-900 mt-2.5">{protocolo.nombre}</h2>
+          <h2 className="font-sans text-[21px] font-semibold text-gray-900 mt-2.5">{protocolo.nombre}</h2>
           {protocolo.descripcion && (
             <p className="text-[13.5px] text-gray-500 mt-1 max-w-xl">{protocolo.descripcion}</p>
           )}
@@ -219,7 +219,7 @@ export default function ProtocolosDetail({ protocoloId, user, onBack, onOpenPrue
       </div>
 
       <div className="bg-white rounded-2xl border p-6" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
-        <h4 className="font-serif font-semibold text-gray-900 text-[15px] mb-4 flex items-center gap-2">
+        <h4 className="font-sans font-semibold text-gray-900 text-[15px] mb-4 flex items-center gap-2">
           <ClipboardList size={16} style={{ color: '#0F6E56' }} /> Checklist estático del protocolo
         </h4>
         {items.length === 0 ? (
@@ -240,7 +240,7 @@ export default function ProtocolosDetail({ protocoloId, user, onBack, onOpenPrue
 
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
         <div className="px-6 pt-5 pb-1">
-          <h4 className="font-serif font-semibold text-gray-900 text-[15px] flex items-center gap-2">
+          <h4 className="font-sans font-semibold text-gray-900 text-[15px] flex items-center gap-2">
             <History size={16} style={{ color: '#0F6E56' }} /> Trazabilidad — historial de registros
           </h4>
         </div>

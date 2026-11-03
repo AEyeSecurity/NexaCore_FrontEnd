@@ -54,7 +54,7 @@ export default function CreateViewModal({ open, creating, createError, onConfirm
         {/* Header */}
         <div className="flex items-start justify-between mb-5">
           <div>
-            <h2 className="font-serif text-[18px] font-semibold text-gray-900">Nueva vista</h2>
+            <h2 className="font-sans text-[18px] font-semibold text-gray-900">Nueva vista</h2>
             <p className="text-[12.5px] text-gray-500 mt-0.5">Nombrá tu panel personalizado.</p>
           </div>
           <button

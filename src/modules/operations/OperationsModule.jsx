@@ -1,11 +1,12 @@
 import {
   Briefcase, Plus, CheckCircle, Clock, AlertCircle, XCircle,
   Search, RefreshCw, Trash2, X, User, UserRound, Users, Calendar, Edit2, AlertTriangle,
-  Send, ThumbsUp, ThumbsDown, Inbox, History, Settings2, ChevronDown, UserCog, ShieldAlert,
+  Send, ThumbsUp, ThumbsDown, Inbox, MessageSquare, History, Settings2, ChevronDown, UserCog, ShieldAlert,
 } from 'lucide-react'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../../lib/api'
+import ActualizacionesPanel from './ActualizacionesPanel'
 import EtapasConfigModal from './EtapasConfigModal'
 import TableroModal from './TableroModal'
 import VerMiembrosModal, { mensajeErrorMiembros } from './VerMiembrosModal'
@@ -305,7 +306,7 @@ function ModalHistorial({ tarea, onClose }) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <History size={15} style={{ color: '#0F6E56' }} className="shrink-0" />
-              <h3 className="font-serif font-semibold text-gray-900 text-[16px]">Historial de cambios</h3>
+              <h3 className="font-sans font-semibold text-gray-900 text-[16px]">Historial de cambios</h3>
             </div>
             <p className="text-[11.5px] text-gray-400 mt-0.5 truncate">{tarea.titulo}</p>
           </div>
@@ -370,7 +371,7 @@ function ModalHistorial({ tarea, onClose }) {
 }
 
 // ── TareaCard ─────────────────────────────────────────────────────────────────
-function TareaCard({ tarea, etapas, onEditar, onEliminar, onCambiarEtapa, onHistorial, onDragStart, onDragEnd, isDragging }) {
+function TareaCard({ tarea, etapas, onEditar, onEliminar, onCambiarEtapa, onActualizaciones, onHistorial, onDragStart, onDragEnd, isDragging }) {
   const [cambiando, setCambiando] = useState(false)
   const prioCfg = PRIORIDAD_CFG[tarea.prioridad] || { background: '#F3F4F6', color: '#4B5563' }
   const etapa = tarea.operativo_etapas
@@ -399,6 +400,10 @@ function TareaCard({ tarea, etapas, onEditar, onEliminar, onCambiarEtapa, onHist
       <div className="flex items-start justify-between gap-2">
         <p className="font-semibold text-gray-800 text-[13.5px] leading-snug flex-1">{tarea.titulo}</p>
         <div className="flex gap-1 shrink-0">
+          <button onClick={() => onActualizaciones(tarea)} aria-label="Actualizaciones"
+            className="p-1 rounded-lg text-gray-300 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="Actualizaciones">
+            <MessageSquare size={12} />
+          </button>
           <button onClick={() => onHistorial(tarea)}
             className="p-1 rounded-lg text-gray-300 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="Historial">
             <History size={12} />
@@ -497,7 +502,7 @@ function fmtFinalizacion(iso) {
   return fecha.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-function ModalFinalizadas({ tipo, tableroId, soloMias, version, onClose, onEditar, onHistorial }) {
+function ModalFinalizadas({ tipo, tableroId, soloMias, version, onClose, onEditar, onActualizaciones, onHistorial }) {
   const cfg = FINALIZADAS_CFG[tipo]
   const [tareas,  setTareas]  = useState([])
   const [loading, setLoading] = useState(true)
@@ -544,6 +549,10 @@ function ModalFinalizadas({ tipo, tableroId, soloMias, version, onClose, onEdita
         <div className="flex items-start justify-between gap-2">
           <p className="font-semibold text-gray-800 text-[13.5px] leading-snug flex-1">{t.titulo}</p>
           <div className="flex gap-1 shrink-0">
+            <button onClick={() => onActualizaciones(t)} aria-label="Actualizaciones"
+              className="p-1 rounded-lg text-gray-300 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="Actualizaciones">
+              <MessageSquare size={12} />
+            </button>
             <button onClick={() => onHistorial(t)}
               className="p-1 rounded-lg text-gray-300 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="Historial">
               <History size={12} />
@@ -584,7 +593,7 @@ function ModalFinalizadas({ tipo, tableroId, soloMias, version, onClose, onEdita
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <Icon size={15} style={{ color: cfg.color }} className="shrink-0" />
-              <h3 className="font-serif font-semibold text-gray-900 text-[16px]">{cfg.titulo}</h3>
+              <h3 className="font-sans font-semibold text-gray-900 text-[16px]">{cfg.titulo}</h3>
             </div>
             <p className="text-[11.5px] text-gray-400 mt-0.5">
               Historial completo{soloMias ? ' · solo mis tareas' : ''}
@@ -767,7 +776,7 @@ function ModalTarea({ tarea, etapas, miembros, tableroId, onClose, onSaved, user
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b"
           style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
-          <h3 className="font-serif font-semibold text-gray-900 text-[16px]">{tituloModal}</h3>
+          <h3 className="font-sans font-semibold text-gray-900 text-[16px]">{tituloModal}</h3>
           <button type="button" onClick={onClose}
             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
             <X size={15} />
@@ -1202,6 +1211,8 @@ export default function OperationsModule({ user }) {
   const [editTarea,      setEditTarea]      = useState(null)
   const [confirmDelete,  setConfirmDelete]  = useState(null)
   // tarea seleccionada para ver su historial; null = modal cerrado
+  const [tareaActualizaciones, setTareaActualizaciones] = useState(null)
+  const [actualizacionesVersion, setActualizacionesVersion] = useState(0)
   const [tareaHistorial, setTareaHistorial] = useState(null)
   // historial de finalizadas: 'completada' | 'cancelada' | null = cerrado
   const [finalizadasTipo,    setFinalizadasTipo]    = useState(null)
@@ -1269,12 +1280,13 @@ export default function OperationsModule({ user }) {
   const tableroActivo = tableros.find(t => t.id === tableroActivoId) || null
 
   // El historial de finalizadas es del tablero activo: si cambia, se cierra.
-  useEffect(() => { setFinalizadasTipo(null) }, [tableroActivoId])
+  useEffect(() => { setFinalizadasTipo(null); setTareaActualizaciones(null) }, [tableroActivoId, user?.id])
 
   // Cambiar de tablero o de filtro recarga: solo se aplica la respuesta más reciente.
   const cargaActual = useRef(0)
 
   const cargar = useCallback(async () => {
+    setActualizacionesVersion(v => v + 1)
     const carga = ++cargaActual.current
     if (!tableroActivoId) {
       setTareas([]); setPropuestasCount(0); setMetricas(null); setError(null); setLoading(false)
@@ -1493,7 +1505,7 @@ export default function OperationsModule({ user }) {
           <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: '#E1F5EE' }}>
             <Briefcase size={24} style={{ color: '#0F6E56' }} />
           </div>
-          <p className="font-serif text-[16px] font-semibold text-gray-800 mb-1">Todavía no sos miembro de ningún tablero.</p>
+          <p className="font-sans text-[16px] font-semibold text-gray-800 mb-1">Todavía no sos miembro de ningún tablero.</p>
           <p className="text-[13px] text-gray-500">Pedile a un administrador de tablero, a Dirección o a Superadmin que te agregue a uno.</p>
         </div>
       )}
@@ -1729,6 +1741,7 @@ export default function OperationsModule({ user }) {
                             onEliminar={setConfirmDelete}
                             onCambiarEtapa={handleCambiarEtapa}
                             onHistorial={setTareaHistorial}
+                            onActualizaciones={setTareaActualizaciones}
                             isDragging={draggedTareaId === t.id}
                             onDragStart={() => setDraggedTareaId(t.id)}
                             onDragEnd={() => setDraggedTareaId(null)} />
@@ -1822,7 +1835,14 @@ export default function OperationsModule({ user }) {
           onClose={() => setFinalizadasTipo(null)}
           onEditar={abrirEditar}
           onHistorial={setTareaHistorial}
+          onActualizaciones={setTareaActualizaciones}
         />
+      )}
+
+      {tareaActualizaciones && (
+        <ActualizacionesPanel key={`${user?.id}:${tareaActualizaciones.id}`}
+          tarea={tareaActualizaciones} tableroId={tableroActivoId} version={actualizacionesVersion}
+          onClose={() => setTareaActualizaciones(null)} />
       )}
 
       {/* ── Modal historial de cambios — solo lectura ── */}
@@ -1838,7 +1858,7 @@ export default function OperationsModule({ user }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => setConfirmDelete(null)} />
           <div className="relative bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full fade-in">
-            <h3 className="font-serif font-semibold text-gray-900 mb-2 text-[16px]">¿Eliminar tarea?</h3>
+            <h3 className="font-sans font-semibold text-gray-900 mb-2 text-[16px]">¿Eliminar tarea?</h3>
             <p className="text-[13px] text-gray-500 mb-5">
               Se eliminará <span className="font-medium text-gray-700">"{confirmDelete.titulo}"</span>.
               Esta acción no se puede deshacer.
