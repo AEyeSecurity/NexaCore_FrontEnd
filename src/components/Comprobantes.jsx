@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Trash2, Eye, RefreshCw, FileText, Image } from 'lucide-react'
+import { Trash2, RefreshCw, FileText, Image } from 'lucide-react'
 import { api } from '../lib/api'
 import AppModal from './AppModal'
 
@@ -123,12 +123,14 @@ function DetallePanel({ comprobante, onEliminar }) {
         <div className="flex gap-2">
           {!vencido && (
             <a href={comprobante.archivo_url} target="_blank" rel="noreferrer"
-              className="btn-secondary flex-1 justify-center text-xs">
-              <Eye size={13} /> Ver archivo
+              className="flex-1 flex items-center justify-center px-3 py-2 rounded-xl border text-[12.5px] font-medium text-gray-600 bg-white hover:bg-gray-50 transition-colors"
+              style={{ borderColor: 'rgba(15,110,86,0.2)' }}>
+              Ver archivo
             </a>
           )}
-          <button onClick={onEliminar} className={`btn-danger justify-center text-xs ${vencido ? 'w-full' : 'flex-1'}`}>
-            <Trash2 size={13} /> Eliminar
+          <button onClick={onEliminar}
+            className={`flex items-center justify-center px-3 py-2 rounded-xl border border-red-200 text-[12.5px] font-medium text-red-600 bg-white hover:bg-red-50 transition-colors ${vencido ? 'w-full' : 'flex-1'}`}>
+            Eliminar
           </button>
         </div>
       </div>
