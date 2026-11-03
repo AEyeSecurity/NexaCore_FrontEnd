@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { ROLE_PAGES, useAllowedModules } from '../lib/permissions'
 import { useNexi } from '../context/NexiContext'
+import AlertasCampana from './AlertasCampana'
 
 const NAV = [
   { section: 'PRINCIPAL', items: [
@@ -224,13 +225,14 @@ export default function Layout({ children, page, onNavigate, user, onLogout }) {
       mobileOpen={mobileOpen}
       setMobileOpen={setMobileOpen}
       renderSidebar={renderSidebar}
+      campana={<AlertasCampana userKey={user?.email} onNavigate={onNavigate} tono="oscuro" />}
     >
       {children}
     </LayoutShell>
   )
 }
 
-function LayoutShell({ collapsed, mobileOpen, setMobileOpen, renderSidebar, children }) {
+function LayoutShell({ collapsed, mobileOpen, setMobileOpen, renderSidebar, campana, children }) {
   const { isOpen } = useNexi()
 
   return (
@@ -274,6 +276,7 @@ function LayoutShell({ collapsed, mobileOpen, setMobileOpen, renderSidebar, chil
             </button>
           </div>
           <div className="flex items-center gap-2">
+            {campana}
             <div
               className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium"
               style={{ background: '#E1F5EE', color: '#0F6E56' }}

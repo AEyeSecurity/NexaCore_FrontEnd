@@ -18,7 +18,8 @@ import ReportesModule from './modules/reportes/ReportesModule'
 import AuthCallback from './components/AuthCallback'
 import { NexiProvider } from './context/NexiContext'
 import NexiWidget from './components/nexi/NexiWidget'
-import { getAllowedPages, prefetchAllowedModules } from './lib/permissions'
+import { getAllowedPages, prefetchAllowedModules, clearAllowedModules } from './lib/permissions'
+import { useAlertasAutoRefresh, clearAlertas } from './lib/alertas'
 
 // Páginas que renderiza Layout. Cualquier otro valor de `page` vuelve a Inicio.
 const LAYOUT_PAGES = new Set([
@@ -30,6 +31,9 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [page, setPage] = useState('home')
   const [financeInitialTab, setFinanceInitialTab] = useState(null)
+  // FinanceModule lee initialTab solo al montarse: navegar a una pestaña
+  // concreta (ej. desde una alerta) estando ya en Finanzas lo remonta.
+  const [financeNavKey, setFinanceNavKey] = useState(0)
   const [authLoading, setAuthLoading] = useState(true)
   // Estado dedicado para el flujo OAuth callback.
   // Necesario porque cuando el acceso es denegado, user y page ya tienen
@@ -46,15 +50,22 @@ export default function App() {
       setAuthLoading(false)
       return
     }
-    // Restaurar sesión al recargar la página
+    // Restaurar sesión al recargar la página. Los módulos habilitados se piden
+    // ya, antes de renderizar Inicio/sidebar/Nexi (que reutilizan ese pedido).
     getSession()
-      .then(session => { if (session) setUser(session) })
+      .then(session => {
+        if (!session) return
+        prefetchAllowedModules(session.email)
+        setUser(session)
+      })
       .catch(() => {})
       .finally(() => setAuthLoading(false))
 
     // Reaccionar a cambios de estado de auth (expiración, logout desde otra pestaña)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
+        clearAllowedModules()
+        clearAlertas()
         setUser(null)
         setPage('home')
       }
@@ -73,8 +84,6 @@ export default function App() {
   const userEmail = user?.email
   useEffect(() => {
     if (!userEmail) return
-    // En paralelo con el perfil: así no espera a que Inicio/sidebar se monten.
-    prefetchAllowedModules(userEmail)
     let alive = true
     api.getPerfil()
       .then(perfil => {
@@ -86,16 +95,35 @@ export default function App() {
     return () => { alive = false }
   }, [userEmail])
 
+  // Alertas: se piden al iniciar sesión, al volver a la pestaña y cada 3 min
+  // con la pestaña visible. Sin sesión no hay pedidos.
+  useAlertasAutoRefresh(userEmail)
+
   const navigate = (targetPage, opts = {}) => {
     // Al navegar a Finance, registrar el tab inicial si se indica; limpiar si no
     if (targetPage === 'finance') {
       setFinanceInitialTab(opts?.tab ?? null)
+      if (opts?.tab) setFinanceNavKey(k => k + 1)
     }
     setPage(targetPage)
   }
 
-  const handleLogin  = (session) => { setUser(session); setPage('home') }
-  const handleLogout = async () => { await logout(); setUser(null); setPage('home') }
+  // Login y logout descartan los módulos y las alertas de la sesión anterior:
+  // nunca se reutilizan datos de otra cuenta ni de una sesión ya cerrada.
+  const handleLogin = (session) => {
+    clearAllowedModules()
+    clearAlertas()
+    prefetchAllowedModules(session?.email)
+    setUser(session)
+    setPage('home')
+  }
+  const handleLogout = async () => {
+    clearAllowedModules()
+    clearAlertas()
+    await logout()
+    setUser(null)
+    setPage('home')
+  }
 
   // Manejar retorno de OAuth antes que cualquier otra lógica de renderizado
   if (isOAuthCallback) {
@@ -106,6 +134,8 @@ export default function App() {
           handleLogin(profile)
         }}
         onDeny={() => {
+          clearAllowedModules()
+          clearAlertas()
           setIsOAuthCallback(false)
           setUser(null)
         }}
@@ -131,7 +161,7 @@ export default function App() {
     <Layout page={page} onNavigate={navigate} user={user} onLogout={handleLogout}>
       {page === 'dashboard'     && <DashboardHub onNavigate={navigate} user={user} />}
       {page === 'indicadores'   && <IndicadoresModule />}
-      {page === 'finance'       && <FinanceModule user={user} initialTab={financeInitialTab} />}
+      {page === 'finance'       && <FinanceModule key={financeNavKey} user={user} initialTab={financeInitialTab} />}
       {page === 'operations'    && <OperationsModule user={user} />}
       {page === 'crm'           && (() => {
         const ap = getAllowedPages(user?.role)

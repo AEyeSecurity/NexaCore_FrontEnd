@@ -244,6 +244,9 @@ export const api = {
 
   // ── RBAC ─────────────────────────────────────────
   getUsuariosAsignables: () => request('/api/rbac/usuarios/asignables'),
+
+  // ── Alertas dinámicas (filtradas por permisos en el backend) ──
+  getAlertas: () => request('/api/alertas'),
   getUsuarios:           () => request('/api/rbac/usuarios'),
   crearUsuario:   (body)     => request('/api/rbac/usuarios',       { method: 'POST',   body: JSON.stringify(body) }),
   editarUsuario:  (id, body) => request(`/api/rbac/usuarios/${id}`, { method: 'PUT',    body: JSON.stringify(body) }),

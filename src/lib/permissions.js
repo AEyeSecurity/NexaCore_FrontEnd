@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { api } from './api'
+import { crearStoreModulos, leerModulos } from './allowedModulesStore'
 
 // Fuente única de verdad para qué páginas/módulos puede ver cada rol.
 // null = acceso total (sin restricción). Reutilizado por el sidebar (Layout.jsx).
@@ -27,55 +28,37 @@ export function isHighHierarchy(user) {
 }
 
 // Módulos habilitados según la Matriz de permisos (usuario > rol). La única
-// fuente accesible para cualquier usuario es GET /api/dashboard/config.
-// Mientras carga (o si falla) devuelve [] → lo que depende de él queda oculto.
-// También define qué contextos ofrece Nexi (ver nexiModules.js).
+// fuente accesible para cualquier usuario es GET /api/dashboard/config, que
+// sigue siendo la que decide: acá solo se guarda su última respuesta.
+// Mientras no hay respuesta confirmada (o si falla) devuelve [] → lo que
+// depende de él queda oculto. También define qué contextos ofrece Nexi.
 //
-// Cacheado por sesión (por `userKey`): el sidebar y la pantalla de Inicio
-// montan este hook casi al mismo tiempo al loguearse y pedían cada uno su
-// propia copia del mismo GET; ahora comparten un único pedido en vuelo, y
-// una vez resuelto queda en memoria — volver a Inicio más tarde no vuelve a
-// pedirlo. Solo la primera vez de la sesión paga el viaje de red real.
-let cacheKey
-let cachedPromise = null
+// Estado compartido por sesión (ver allowedModulesStore.js): Inicio, sidebar y
+// Nexi comparten un único pedido en vuelo; una respuesta ya confirmada se lee
+// en el primer render (volver a Inicio no parpadea) y se revalida en segundo
+// plano pasados 60 s. Se descarta al iniciar o cerrar sesión (App.jsx).
+const modulosStore = crearStoreModulos(
+  () => api.getDashboardConfig().then(res => res?.allowedModules || [])
+)
 
-function fetchAllowedModulesOnce(userKey) {
-  if (cacheKey === userKey && cachedPromise) return cachedPromise
-  cacheKey = userKey
-  cachedPromise = api.getDashboardConfig()
-    .then(res => res?.allowedModules || [])
-    .catch(err => {
-      // No cachear un fallo transitorio (ej. una carrera justo al loguearse):
-      // se limpia para que el próximo montaje reintente en vez de quedar
-      // "sin módulos" para el resto de la sesión.
-      if (cacheKey === userKey) { cacheKey = undefined; cachedPromise = null }
-      throw err
-    })
-    .catch(() => [])
-  return cachedPromise
-}
-
-// Dispara el pedido lo antes posible (ej. apenas se conoce el usuario
-// logueado, en App.jsx) en vez de esperar a que Inicio/sidebar se monten —
-// así corre en paralelo con lo demás que se pide en ese momento (perfil,
-// etc.) en lugar de arrancar recién cuando el componente aparece.
+// Dispara el pedido apenas se conoce la sesión (App.jsx), antes de renderizar
+// Inicio, sidebar y Nexi: cuando ellos montan ya está en vuelo y lo reutilizan.
 export function prefetchAllowedModules(userKey) {
-  if (userKey) fetchAllowedModulesOnce(userKey)
+  modulosStore.asegurar(userKey)
 }
 
-// Devuelve [allowedModules, loading]: `loading` permite a quien lo use
-// distinguir "todavía no sé" de "ya sé y no tiene acceso" (ej. para no
-// esconder/mostrar de golpe un ítem que depende de este pedido).
+// Descarta los módulos de la sesión anterior (logout, login con otra cuenta).
+export function clearAllowedModules() {
+  modulosStore.limpiar()
+}
+
+// Devuelve [allowedModules, loading, status]: `loading` distingue "todavía no
+// sé" de "ya sé y no tiene acceso" (para reservar el lugar de un ítem sin
+// mostrarlo ni esconderlo de golpe). status: 'loading' | 'success' | 'error' | 'idle'.
 export function useAllowedModules(userKey) {
-  const [allowedModules, setAllowedModules] = useState([])
-  const [loading, setLoading] = useState(cacheKey !== userKey)
+  const entry = useSyncExternalStore(modulosStore.subscribe, () => modulosStore.snapshot(userKey))
   useEffect(() => {
-    let alive = true
-    setLoading(cacheKey !== userKey)
-    fetchAllowedModulesOnce(userKey).then(data => {
-      if (alive) { setAllowedModules(data); setLoading(false) }
-    })
-    return () => { alive = false }
+    modulosStore.asegurar(userKey)
   }, [userKey])
-  return [allowedModules, loading]
+  return leerModulos(entry, userKey)
 }
