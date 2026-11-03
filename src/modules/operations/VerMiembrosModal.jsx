@@ -172,7 +172,7 @@ export default function VerMiembrosModal({ tablero, user, onClose, onActualizado
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <Users size={15} style={{ color: '#0F6E56' }} className="shrink-0" />
-              <h3 className="font-serif font-semibold text-gray-900 text-[16px]">Miembros del tablero</h3>
+              <h3 className="font-sans font-semibold text-gray-900 text-[16px]">Miembros del tablero</h3>
             </div>
             <p className="text-[11.5px] text-gray-400 mt-0.5 truncate">{tablero?.nombre}</p>
           </div>
@@ -337,7 +337,7 @@ export default function VerMiembrosModal({ tablero, user, onClose, onActualizado
         {confirmacion && (
           <div className="absolute inset-0 rounded-2xl flex items-center justify-center p-6" style={{ background: 'rgba(255,255,255,0.92)' }}>
             <div className="bg-white rounded-2xl shadow-xl border p-5 w-full max-w-xs fade-in" style={{ borderColor: 'rgba(15,110,86,0.15)' }}>
-              <h4 className="font-serif font-semibold text-gray-900 mb-2 text-[15px]">{confirmacion.titulo}</h4>
+              <h4 className="font-sans font-semibold text-gray-900 mb-2 text-[15px]">{confirmacion.titulo}</h4>
               <p className="text-[12.5px] text-gray-500 mb-4 leading-relaxed">{confirmacion.mensaje}</p>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setConfirmacion(null)} disabled={procesando}

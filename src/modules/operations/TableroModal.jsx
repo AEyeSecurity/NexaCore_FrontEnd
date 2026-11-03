@@ -111,7 +111,7 @@ export default function TableroModal({ open, tablero, user, onClose, onSaved }) 
       <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md fade-in flex flex-col" style={{ maxHeight: '88vh' }}>
 
         <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
-          <h3 className="font-serif font-semibold text-gray-900 text-[16px]">
+          <h3 className="font-sans font-semibold text-gray-900 text-[16px]">
             {isEdit ? 'Editar tablero' : 'Nuevo tablero'}
           </h3>
           <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">

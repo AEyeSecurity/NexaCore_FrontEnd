@@ -277,7 +277,7 @@ export default function Usuarios({ user }) {
           <div className="h-[3px]" style={{ background: 'linear-gradient(90deg,#1D9E75,#5DCAA5)' }} />
           <div className="px-6 pt-5 pb-6">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="font-serif font-semibold text-[17px] text-gray-900">
+              <h3 className="font-sans font-semibold text-[17px] text-gray-900">
                 {modal === 'nuevo' ? 'Nuevo usuario' : 'Editar usuario'}
               </h3>
               <button onClick={() => setModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">

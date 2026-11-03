@@ -268,12 +268,12 @@ export default function CreateWidgetWizard({
         role="dialog"
         aria-modal="true"
         aria-label="Crear gráfico personalizado"
-        className="relative bg-white shadow-2xl w-full sm:w-[460px] max-w-[92vw] h-full flex flex-col fade-in"
+        className="font-sans [&_.font-serif]:font-sans relative bg-white shadow-2xl w-full sm:w-[460px] max-w-[92vw] h-full flex flex-col fade-in"
       >
         {/* Header */}
         <div className="px-6 py-5 border-b flex-shrink-0" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
           <div className="flex items-start justify-between">
-            <h2 className="font-serif text-[19px] font-semibold text-gray-900">Crear gráfico personalizado</h2>
+            <h2 className="font-sans text-[19px] font-semibold text-gray-900">Crear gráfico personalizado</h2>
             <button
               onClick={onCancel}
               aria-label="Cerrar panel"

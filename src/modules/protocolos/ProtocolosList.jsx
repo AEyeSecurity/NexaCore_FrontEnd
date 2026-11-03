@@ -132,7 +132,7 @@ export default function ProtocolosList({ onOpenProtocolo }) {
                   </span>
                 )}
               </div>
-              <h3 className="font-serif font-semibold text-gray-900 text-[15.5px] mb-1.5">{p.nombre}</h3>
+              <h3 className="font-sans font-semibold text-gray-900 text-[15.5px] mb-1.5">{p.nombre}</h3>
               <p className="text-[13px] text-gray-500 mb-4" style={{ minHeight: '38px' }}>
                 {p.descripcion || 'Sin descripción.'}
               </p>
