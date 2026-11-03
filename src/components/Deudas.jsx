@@ -28,6 +28,14 @@ function formatFecha(fechaStr) {
   return `${d}/${m}/${y.slice(2)}`
 }
 
+// 409: la deuda ya estaba pagada (el backend no permite modificarla);
+// 404: se eliminó. En ambos casos lo que se ve está desactualizado.
+function conflictoMessage(err) {
+  if (err?.status === 409) return err.message || 'La deuda ya está pagada y no se puede modificar.'
+  if (err?.status === 404) return 'La deuda ya no existe.'
+  return null
+}
+
 const ESTADOS = ['Pendiente', 'Pagada', 'Vencida']
 
 const inputCls = `w-full border rounded-xl px-3 py-2.5 text-[13.5px] outline-none bg-white transition-colors focus:ring-2 focus:ring-teal-700/10`
@@ -42,7 +50,9 @@ const INICIAL = {
   notas: '',
 }
 
-function FormDeuda({ deuda, onClose, onSaved }) {
+// `onConflicto(mensaje)`: la edición fue rechazada porque la deuda cambió
+// mientras el formulario estaba abierto (pagada o eliminada).
+function FormDeuda({ deuda, onClose, onSaved, onConflicto }) {
   const [form, setForm] = useState(deuda ? { ...deuda } : { ...INICIAL })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -64,7 +74,9 @@ function FormDeuda({ deuda, onClose, onSaved }) {
       }
       onSaved()
     } catch (err) {
-      setError(err.message)
+      const conflicto = deuda && conflictoMessage(err)
+      if (conflicto) onConflicto(conflicto)
+      else setError(err.message)
     } finally {
       setLoading(false)
     }
@@ -153,6 +165,9 @@ export default function Deudas() {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [pagandoId, setPagandoId] = useState(null)
   const [error, setError] = useState(null) // null | { status, message }
+  // Operación rechazada por una deuda desactualizada (409/404); se muestra
+  // después de recargar el listado con el estado real.
+  const [aviso, setAviso] = useState(null)
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -170,13 +185,26 @@ export default function Deudas() {
 
   useEffect(() => { cargar() }, [cargar])
 
+  const handleConflicto = (mensaje) => {
+    setShowForm(false)
+    setEditItem(null)
+    setAviso(mensaje)
+    cargar()
+  }
+
   const handlePagar = async (deuda) => {
     setPagandoId(deuda.id)
+    setAviso(null)
     try {
       await api.editarDeuda(deuda.id, { ...deuda, estado: 'Pagada' })
+      // El backend ya la guardó como Pagada: se refleja enseguida (sin Pagar ni
+      // Editar) mientras se recarga el listado.
+      setItems(prev => prev.map(d => (d.id === deuda.id ? { ...d, estado: 'Pagada' } : d)))
       cargar()
     } catch (e) {
-      alert(e.message)
+      const conflicto = conflictoMessage(e)
+      if (conflicto) handleConflicto(conflicto)
+      else alert(e.message)
     } finally {
       setPagandoId(null)
     }
@@ -254,6 +282,15 @@ export default function Deudas() {
             Tenés <strong>{vencidas.length}</strong> deuda{vencidas.length !== 1 ? 's' : ''} vencida{vencidas.length !== 1 ? 's' : ''} sin pagar.
           </span>
         </div>
+      )}
+
+      {aviso && (
+        <p className="flex items-start gap-2 text-[12.5px] px-3 py-2 rounded-lg" style={{ background: '#FCE9E9', color: '#C23B3A' }} role="alert">
+          <span className="flex-1">{aviso} Se actualizó el listado con el estado actual.</span>
+          <button onClick={() => setAviso(null)} className="flex-shrink-0 opacity-70 hover:opacity-100" aria-label="Cerrar aviso">
+            <X size={14} />
+          </button>
+        </p>
       )}
 
       {error && !sinPermiso && items.length > 0 && (
@@ -337,11 +374,14 @@ export default function Deudas() {
                               <CheckCircle size={14} /> Pagada
                             </span>
                           )}
-                          <button
-                            onClick={() => { setEditItem(d); setShowForm(true) }}
-                            className="px-2 py-1 rounded-lg text-[11.5px] font-medium text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors opacity-0 group-hover:opacity-100">
-                            Editar
-                          </button>
+                          {/* Una deuda pagada no se puede modificar (el backend responde 409) */}
+                          {!pagada && (
+                            <button
+                              onClick={() => { setAviso(null); setEditItem(d); setShowForm(true) }}
+                              className="px-2 py-1 rounded-lg text-[11.5px] font-medium text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors opacity-0 group-hover:opacity-100">
+                              Editar
+                            </button>
+                          )}
                           <button
                             onClick={() => setConfirmDelete(d)}
                             className="p-1.5 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100">
@@ -379,6 +419,7 @@ export default function Deudas() {
           deuda={editItem}
           onClose={() => { setShowForm(false); setEditItem(null) }}
           onSaved={() => { setShowForm(false); setEditItem(null); cargar() }}
+          onConflicto={handleConflicto}
         />
       )}
 

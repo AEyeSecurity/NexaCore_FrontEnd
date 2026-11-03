@@ -8,6 +8,7 @@ import logoUrl from '../../resources/logo3.png'
 import { ROLE_PAGES, useAllowedModules } from '../lib/permissions'
 import { useNexi } from '../context/NexiContext'
 import { HeroOndas, ModuloIlustracion } from './home/HomeIlustraciones'
+import AlertasCampana from './AlertasCampana'
 
 const MODULES = [
   { id: 'finance',       label: 'Finanzas',      icon: TrendingUp,     descripcion: 'Gestión financiera y control de recursos.' },
@@ -158,10 +159,11 @@ export default function Home({ user, onNavigate, onLogout }) {
 
       {/* Top bar */}
       <div
-        className="bg-white flex items-center px-6 py-2 flex-shrink-0"
+        className="bg-white flex items-center justify-between px-6 py-2 flex-shrink-0"
         style={{ borderBottom: '1px solid rgba(15,110,86,0.13)' }}
       >
         <img src={logoUrl} alt="NexaCore" className="h-10 w-auto object-contain" />
+        <AlertasCampana userKey={user?.email} onNavigate={onNavigate} tono="claro" />
       </div>
 
       {/* Content – scrollable */}

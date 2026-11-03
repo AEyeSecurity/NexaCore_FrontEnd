@@ -1,14 +1,14 @@
 import {
   Briefcase, Plus, CheckCircle, Clock, AlertCircle, XCircle,
   Search, RefreshCw, Trash2, X, User, UserRound, Users, Calendar, Edit2, AlertTriangle,
-  Send, ThumbsUp, ThumbsDown, Inbox, History, Settings2, ChevronDown,
+  Send, ThumbsUp, ThumbsDown, Inbox, History, Settings2, ChevronDown, UserCog, ShieldAlert,
 } from 'lucide-react'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../../lib/api'
 import EtapasConfigModal from './EtapasConfigModal'
 import TableroModal from './TableroModal'
-import VerMiembrosModal from './VerMiembrosModal'
+import VerMiembrosModal, { mensajeErrorMiembros } from './VerMiembrosModal'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 // Las etapas del tablero (columnas) son 100% personalizables y vienen de
@@ -18,6 +18,13 @@ const TIPOS_CERRADOS = ['completada', 'cancelada', 'en_revision_cerrada']
 
 const PRIORIDADES  = ['Alta', 'Media', 'Baja']
 const ROLES_ADMIN  = ['Superadmin', 'Dirección']
+
+// Propuestas deshabilitadas por decisión del cliente. Todo su código (vista,
+// tarjetas, endpoints, formulario) se conserva: para volver a mostrarlas
+// alcanza con poner esto en true. Mientras esté en false no se muestra la
+// pestaña ni la vista, y las tareas nuevas se crean siempre como asignación
+// directa (si no, quedarían como propuestas que nadie puede ver ni aprobar).
+const ENABLE_PROPUESTAS = false
 
 // Varios tableros con miembros: cada uno tiene sus propias tareas y su
 // propia gente. Dirección/Superadmin ven y gestionan todos; el resto solo
@@ -139,17 +146,39 @@ function ResponsablesLinea({ tarea, prefijo }) {
   )
 }
 
+// Bloquea el scroll de la página mientras haya al menos un modal abierto. Con un
+// contador, cerrar un modal apilado (ej. editar una tarea desde el historial de
+// finalizadas) no libera el fondo mientras el de abajo siga abierto.
+let modalesAbiertos = 0
+function useBloqueoScroll() {
+  useEffect(() => {
+    modalesAbiertos++
+    document.body.style.overflow = 'hidden'
+    return () => {
+      modalesAbiertos--
+      if (modalesAbiertos === 0) document.body.style.overflow = ''
+    }
+  }, [])
+}
+
 // ── StatCard ──────────────────────────────────────────────────────────────────
-function StatCard({ label, value, icon: Icon, color, onClick, active }) {
+// `hint`: texto discreto bajo el valor que indica que la tarjeta es un acceso
+// (ej. "Ver historial"). `title`: aclaración al pasar el mouse.
+function StatCard({ label, value, icon: Icon, color, onClick, active, hint, title }) {
   return (
     <div
-      className="bg-white rounded-xl p-5 border shadow-sm transition-all"
+      className={'bg-white rounded-xl p-5 border shadow-sm transition-all' + (onClick ? ' hover:shadow-md' : '')}
       style={{
         borderColor: active ? color : 'rgba(15,110,86,0.1)',
         boxShadow:   active ? `0 0 0 2px ${color}40` : undefined,
         cursor:      onClick ? 'pointer' : 'default',
       }}
       onClick={onClick}
+      title={title}
+      {...(onClick ? {
+        role: 'button', tabIndex: 0,
+        onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } },
+      } : {})}
     >
       <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3"
         style={{ background: color + '18' }}>
@@ -157,9 +186,29 @@ function StatCard({ label, value, icon: Icon, color, onClick, active }) {
       </div>
       <p className="text-[12.5px] text-gray-500">{label}</p>
       <p className="text-[22px] font-semibold text-gray-900">{value}</p>
-      {active && (
+      {active ? (
         <p className="text-[10.5px] font-medium mt-1" style={{ color }}>Filtro activo</p>
+      ) : hint && (
+        <p className="flex items-center gap-1 text-[10.5px] font-medium mt-1" style={{ color }}>
+          <History size={10} /> {hint}
+        </p>
       )}
+    </div>
+  )
+}
+
+// ── Interruptor ───────────────────────────────────────────────────────────────
+function Interruptor({ label, activo, onChange }) {
+  return (
+    <div className="flex items-center gap-2.5 flex-shrink-0">
+      <span className="text-[12.5px] font-medium text-gray-600">{label}</span>
+      <button type="button" role="switch" aria-checked={activo} aria-label={label}
+        onClick={() => onChange(v => !v)}
+        className="relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors cursor-pointer"
+        style={{ background: activo ? '#0F6E56' : '#D1D5DB' }}>
+        <span className="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"
+          style={{ transform: activo ? 'translateX(18px)' : 'translateX(3px)' }} />
+      </button>
     </div>
   )
 }
@@ -172,13 +221,13 @@ function ModalHistorial({ tarea, onClose }) {
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState(null)
 
+  useBloqueoScroll()
+
   useEffect(() => {
-    document.body.style.overflow = 'hidden'
     api.getHistorialTarea(tarea.id)
       .then(r => setHistorial(r.data))
       .catch(e => setError(e.message || 'Error al cargar el historial'))
       .finally(() => setLoading(false))
-    return () => { document.body.style.overflow = '' }
   }, [tarea.id])
 
   // Etiquetas legibles para cada tipo de acción registrada en tarea_historial.accion
@@ -426,6 +475,183 @@ function TareaCard({ tarea, etapas, onEditar, onEliminar, onCambiarEtapa, onHist
   )
 }
 
+// ── ModalFinalizadas ──────────────────────────────────────────────────────────
+// Historial de tareas completadas o canceladas de un tablero, sin límite de
+// antigüedad (el Kanban solo muestra las finalizadas en los últimos 7 días).
+// Qué es final lo decide el backend (vista=historial). Completadas/canceladas se
+// separan por operativo_etapas.tipo_base, la misma clave con la que
+// /tareas/metricas arma porTipoBase: así la lista coincide con el número del
+// mosaico. No se usa `estado`: si se cambia el tipo_base de una etapa, el
+// backend no resincroniza tareas.estado y quedaría desfasado. Las tareas finales
+// sin etapa (el backend las clasifica por estado) no entran en el mosaico: se
+// muestran aparte, sin ocultarlas. `soloMias` respeta el interruptor del
+// tablero, igual que el mosaico. `version` cambia al editar una tarea desde acá.
+const FINALIZADAS_CFG = {
+  completada: { estado: 'Completada', titulo: 'Tareas completadas', fecha: 'Completada el', color: '#1D9E75', icon: CheckCircle },
+  cancelada:  { estado: 'Cancelada',  titulo: 'Tareas canceladas',  fecha: 'Cancelada el',  color: '#6B7280', icon: XCircle     },
+}
+
+function fmtFinalizacion(iso) {
+  const fecha = new Date(iso)
+  if (Number.isNaN(fecha.getTime())) return null
+  return fecha.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function ModalFinalizadas({ tipo, tableroId, soloMias, version, onClose, onEditar, onHistorial }) {
+  const cfg = FINALIZADAS_CFG[tipo]
+  const [tareas,  setTareas]  = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error,   setError]   = useState(null)
+  const [search,  setSearch]  = useState('')
+
+  useBloqueoScroll()
+
+  useEffect(() => {
+    let vigente = true
+    setLoading(true)
+    setError(null)
+    api.getTareas({ tablero_id: tableroId, vista: 'historial', ...(soloMias ? { solo_mias: true } : {}) })
+      .then(r => { if (vigente) setTareas(r.data ?? []) })
+      .catch(e => { if (vigente) setError(e?.message || 'No se pudo cargar el historial') })
+      .finally(() => { if (vigente) setLoading(false) })
+    return () => { vigente = false }
+  }, [tableroId, soloMias, version])
+
+  const delTipo  = tareas.filter(t => t.operativo_etapas?.tipo_base === tipo)
+  const sinEtapa = tareas.filter(t => !t.operativo_etapas && t.estado === cfg.estado)
+
+  // Más recientes primero; las que no tienen fecha confiable, al final.
+  const q = search.trim().toLowerCase()
+  const filtrarOrdenar = (lista) => lista
+    .filter(t => !q || t.titulo?.toLowerCase().includes(q) || t.descripcion?.toLowerCase().includes(q))
+    .sort((a, b) => {
+      if (!a.fecha_finalizacion && !b.fecha_finalizacion) return (b.created_at ?? '').localeCompare(a.created_at ?? '')
+      if (!a.fecha_finalizacion) return 1
+      if (!b.fecha_finalizacion) return -1
+      return b.fecha_finalizacion.localeCompare(a.fecha_finalizacion)
+    })
+  const visibles         = filtrarOrdenar(delTipo)
+  const visiblesSinEtapa = filtrarOrdenar(sinEtapa)
+
+  const Icon = cfg.icon
+
+  const renderTarea = (t) => {
+    const prioCfg = PRIORIDAD_CFG[t.prioridad] || { background: '#F3F4F6', color: '#4B5563' }
+    const fecha = t.fecha_finalizacion ? fmtFinalizacion(t.fecha_finalizacion) : null
+    return (
+      <div key={t.id} className="rounded-xl border p-4 space-y-2"
+        style={{ borderColor: 'rgba(15,110,86,0.12)' }}>
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-semibold text-gray-800 text-[13.5px] leading-snug flex-1">{t.titulo}</p>
+          <div className="flex gap-1 shrink-0">
+            <button onClick={() => onHistorial(t)}
+              className="p-1 rounded-lg text-gray-300 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="Historial">
+              <History size={12} />
+            </button>
+            <button onClick={() => onEditar(t)}
+              className="p-1 rounded-lg text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors" title="Ver / editar">
+              <Edit2 size={12} />
+            </button>
+          </div>
+        </div>
+        {t.descripcion && (
+          <p className="text-[12px] text-gray-500 leading-relaxed line-clamp-2">{t.descripcion}</p>
+        )}
+        <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap">
+          {t.prioridad && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium" style={prioCfg}>
+              {t.prioridad}
+            </span>
+          )}
+          <span className="flex items-center gap-1.5 text-[11.5px]" style={{ color: fecha ? '#6B7280' : '#9CA3AF' }}>
+            <Calendar size={11} className="shrink-0" />
+            {fecha ? `${cfg.fecha} ${fecha}` : <span className="italic">Fecha no registrada</span>}
+          </span>
+        </div>
+        <ResponsablesLinea tarea={t} />
+      </div>
+    )
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg fade-in flex flex-col"
+        style={{ maxHeight: '85vh' }}>
+
+        <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0"
+          style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <Icon size={15} style={{ color: cfg.color }} className="shrink-0" />
+              <h3 className="font-serif font-semibold text-gray-900 text-[16px]">{cfg.titulo}</h3>
+            </div>
+            <p className="text-[11.5px] text-gray-400 mt-0.5">
+              Historial completo{soloMias ? ' · solo mis tareas' : ''}
+            </p>
+          </div>
+          <button type="button" onClick={onClose}
+            className="ml-3 p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0">
+            <X size={15} />
+          </button>
+        </div>
+
+        <div className="px-6 pt-4 flex-shrink-0">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar por título o descripción..."
+              className={inputCls + ' pl-9'} style={{ borderColor: 'rgba(15,110,86,0.2)' }} />
+          </div>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-6 py-4">
+          {loading ? (
+            <div className="flex items-center justify-center h-32 text-gray-400 text-[13.5px]">
+              <RefreshCw size={16} className="animate-spin mr-2" /> Cargando…
+            </div>
+          ) : error ? (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-[13px] text-red-700">{error}</div>
+          ) : visibles.length === 0 && visiblesSinEtapa.length === 0 ? (
+            <div className="text-center py-10">
+              <Icon size={28} className="mx-auto mb-3 text-gray-300" />
+              <p className="text-[13.5px] font-medium text-gray-500">{q ? 'Sin resultados' : 'Sin tareas'}</p>
+              <p className="text-[12px] text-gray-400 mt-1">
+                {q ? 'Ninguna tarea coincide con la búsqueda.' : `Todavía no hay ${cfg.titulo.toLowerCase()} en este tablero.`}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {visibles.length > 0 && (
+                <div className="space-y-3">{visibles.map(renderTarea)}</div>
+              )}
+              {visiblesSinEtapa.length > 0 && (
+                <div>
+                  <p className="text-[12px] font-semibold text-gray-400 uppercase tracking-wider">
+                    Sin etapa asignada ({visiblesSinEtapa.length})
+                  </p>
+                  <p className="text-[11.5px] text-gray-400 mt-0.5 mb-3">
+                    Tareas antiguas con estado {cfg.estado} y sin etapa del tablero: no se cuentan en el mosaico.
+                  </p>
+                  <div className="space-y-3">{visiblesSinEtapa.map(renderTarea)}</div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {!loading && !error && delTipo.length > 0 && (
+          <div className="px-6 py-3 border-t flex-shrink-0" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
+            <p className="text-[11.5px] text-gray-400 text-center">
+              {q ? `${visibles.length} de ${delTipo.length}` : delTipo.length} {delTipo.length === 1 ? 'tarea' : 'tareas'} · más recientes primero
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  , document.body)
+}
+
 // ── ModalTarea ────────────────────────────────────────────────────────────────
 // `miembros`: gente del tablero activo (fuente de responsables posibles).
 // `tableroId`: se manda como tablero_id solo al crear — una tarea no puede
@@ -482,14 +708,11 @@ function ModalTarea({ tarea, etapas, miembros, tableroId, onClose, onSaved, user
   const incluyeAlUsuario = user?.id
     ? asignadosIds.includes(user.id)
     : asignadosIds.some(id => nombreUsuario(id) === user?.name)
-  const modoEfectivo = adminUser
-    ? modo
+  const modoEfectivo = !ENABLE_PROPUESTAS ? 'asignacion'
+    : adminUser ? modo
     : (asignadosIds.length === 0 || incluyeAlUsuario) ? 'asignacion' : 'propuesta'
 
-  useEffect(() => {
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = '' }
-  }, [])
+  useBloqueoScroll()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -555,7 +778,7 @@ function ModalTarea({ tarea, etapas, miembros, tableroId, onClose, onSaved, user
           <div className="px-6 py-5 space-y-4">
 
             {/* Toggle asignar/proponer — solo para admins creando una tarea nueva */}
-            {!tarea && adminUser && (
+            {ENABLE_PROPUESTAS && !tarea && adminUser && (
               <div className="flex rounded-xl overflow-hidden border"
                 style={{ borderColor: 'rgba(15,110,86,0.2)' }}>
                 <button type="button" onClick={() => setModo('asignacion')}
@@ -965,6 +1188,8 @@ export default function OperationsModule({ user }) {
   const [draggedTareaId, setDraggedTareaId] = useState(null)
 
   const [vista, setVista] = useState('kanban')
+  // Con Propuestas deshabilitado, ningún estado previo puede mostrar esa vista.
+  const vistaActiva = ENABLE_PROPUESTAS ? vista : 'kanban'
 
   const [search,            setSearch]            = useState('')
   const [filtroPrioridad,   setFiltroPrioridad]   = useState('Todos')
@@ -978,6 +1203,9 @@ export default function OperationsModule({ user }) {
   const [confirmDelete,  setConfirmDelete]  = useState(null)
   // tarea seleccionada para ver su historial; null = modal cerrado
   const [tareaHistorial, setTareaHistorial] = useState(null)
+  // historial de finalizadas: 'completada' | 'cancelada' | null = cerrado
+  const [finalizadasTipo,    setFinalizadasTipo]    = useState(null)
+  const [finalizadasVersion, setFinalizadasVersion] = useState(0)
 
   // ── Tableros ──────────────────────────────────────────────────────────
   const [tableros,        setTableros]        = useState([])
@@ -988,13 +1216,18 @@ export default function OperationsModule({ user }) {
   })
   const [tableroModalOpen, setTableroModalOpen] = useState(false)
   const [tableroEditando,  setTableroEditando]  = useState(null) // null = crear
-  const [verMiembrosOpen,  setVerMiembrosOpen]  = useState(false)
+  // id del tablero cuyos miembros se están viendo; null = modal cerrado
+  const [miembrosTableroId, setMiembrosTableroId] = useState(null)
+  // Filtros del backend (solo_mias / solo_abiertas): se aplican al listado y a
+  // las métricas por igual, y se combinan entre sí (AND).
   const [soloMisTareas,    setSoloMisTareas]    = useState(false)
+  const [soloAbiertas,     setSoloAbiertas]     = useState(false)
 
+  // tipo: 'aviso' | 'ok' | 'error'
   const [aviso, setAviso] = useState(null)
   const avisoTimer = useRef(null)
-  const showAviso = useCallback((message) => {
-    setAviso(message)
+  const showAviso = useCallback((message, tipo = 'aviso') => {
+    setAviso({ message, tipo })
     clearTimeout(avisoTimer.current)
     avisoTimer.current = setTimeout(() => setAviso(null), 4000)
   }, [])
@@ -1002,8 +1235,10 @@ export default function OperationsModule({ user }) {
 
   const adminUser = esAdmin(user)
 
-  const cargarTableros = useCallback(async () => {
-    setTablerosLoading(true)
+  // `silencioso`: refresca sin reemplazar las pestañas por "Cargando…" (lo usan
+  // las operaciones de miembros, para no hacer parpadear la pantalla).
+  const cargarTableros = useCallback(async ({ silencioso = false } = {}) => {
+    if (!silencioso) setTablerosLoading(true)
     setTablerosError(null)
     try {
       const res = await api.getTableros()
@@ -1033,6 +1268,9 @@ export default function OperationsModule({ user }) {
 
   const tableroActivo = tableros.find(t => t.id === tableroActivoId) || null
 
+  // El historial de finalizadas es del tablero activo: si cambia, se cierra.
+  useEffect(() => { setFinalizadasTipo(null) }, [tableroActivoId])
+
   // Cambiar de tablero o de filtro recarga: solo se aplica la respuesta más reciente.
   const cargaActual = useRef(0)
 
@@ -1044,15 +1282,28 @@ export default function OperationsModule({ user }) {
     }
     setLoading(true)
     setError(null)
+    // "Solo mis tareas" y "Solo tareas abiertas" los resuelve el backend, con los
+    // mismos parámetros para el listado y las métricas: así columnas, tarjetas y
+    // métricas cuentan lo mismo. La clasificación abierta/cerrada es del backend.
+    const filtrosBackend = {
+      ...(soloMisTareas ? { solo_mias: true } : {}),
+      ...(soloAbiertas  ? { solo_abiertas: true } : {}),
+    }
     const [rTareas, rPropuestas, rEtapas, rMetricas] = await Promise.allSettled([
-      // Admins: filtro por persona en backend (asignado_id). Usuarios comunes ya
-      // reciben solo sus tareas; el filtro por id se aplica sobre esa lista.
-      adminUser
-        ? api.getTareas({ tablero_id: tableroActivoId, ...(filtroResponsable ? { asignado_id: filtroResponsable } : {}) })
-        : fetchPropias(api.getTareas, user, { tablero_id: tableroActivoId }),
-      fetchPropias(api.getPropuestas, user, { tablero_id: tableroActivoId }),
+      // Filtro por responsable también en backend (asignado_id); se combina con el resto.
+      // vista=kanban: el backend oculta las completadas/canceladas hace 7 días o
+      // más (siguen en el historial, ver ModalFinalizadas).
+      api.getTareas({
+        tablero_id: tableroActivoId,
+        vista: 'kanban',
+        ...(filtroResponsable ? { asignado_id: filtroResponsable } : {}),
+        ...filtrosBackend,
+      }),
+      ENABLE_PROPUESTAS
+        ? fetchPropias(api.getPropuestas, user, { tablero_id: tableroActivoId })
+        : Promise.resolve({ data: [] }),
       api.getEtapas(),
-      api.getMetricasOperations({ tablero_id: tableroActivoId, ...(soloMisTareas ? { solo_mias: true } : {}) }),
+      api.getMetricasOperations({ tablero_id: tableroActivoId, ...filtrosBackend }),
     ])
     if (carga !== cargaActual.current) return
 
@@ -1079,7 +1330,7 @@ export default function OperationsModule({ user }) {
     if (rEtapas.status === 'fulfilled') setEtapas(rEtapas.value.data || [])
     if (rMetricas.status === 'fulfilled') setMetricas(rMetricas.value)
     setLoading(false)
-  }, [adminUser, user, filtroResponsable, tableroActivoId, soloMisTareas, cargarTableros, showAviso])
+  }, [user, filtroResponsable, tableroActivoId, soloMisTareas, soloAbiertas, cargarTableros, showAviso])
 
   useEffect(() => { cargar() }, [cargar])
 
@@ -1089,6 +1340,26 @@ export default function OperationsModule({ user }) {
     setTableroModalOpen(false)
     seleccionarTablero(guardado.id)
     cargarTableros()
+  }
+
+  // ── Miembros del tablero ──────────────────────────────────────────────
+  // Las operaciones devuelven el tablero actualizado (miembros + permisos): se
+  // aplica enseguida y después se refrescan los tableros sin tocar el tablero
+  // activo ni los filtros (si el usuario se quitó a sí mismo y dejó de verlo,
+  // cargarTableros cae al primero disponible).
+  const miembrosTablero = tableros.find(t => t.id === miembrosTableroId) || null
+  const handleMiembrosActualizado = (actualizado, mensaje) => {
+    if (actualizado?.id) {
+      setTableros(prev => prev.map(t => (t.id === actualizado.id ? { ...t, ...actualizado } : t)))
+    }
+    if (mensaje) showAviso(mensaje, 'ok')
+    cargarTableros({ silencioso: true })
+  }
+  const handleMiembrosError = (err) => {
+    showAviso(mensajeErrorMiembros(err), 'error')
+    // 403/404/409: los permisos o los miembros cambiaron por otro lado; se
+    // refresca para que el modal muestre el estado real.
+    if ([403, 404, 409].includes(err?.status)) cargarTableros({ silencioso: true })
   }
 
   const handleCambiarEtapa = async (id, nuevaEtapaId) => {
@@ -1194,7 +1465,7 @@ export default function OperationsModule({ user }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {adminUser && tableroActivo && (
+          {tableroActivo?.permisos?.puede_editar_tablero && (
             <button onClick={abrirEditarTablero} className={btnSecondary}
               style={{ borderColor: 'rgba(15,110,86,0.2)' }} title="Editar tablero">
               <Edit2 size={14} /> Editar tablero
@@ -1223,63 +1494,84 @@ export default function OperationsModule({ user }) {
             <Briefcase size={24} style={{ color: '#0F6E56' }} />
           </div>
           <p className="font-serif text-[16px] font-semibold text-gray-800 mb-1">Todavía no sos miembro de ningún tablero.</p>
-          <p className="text-[13px] text-gray-500">Pedile a Dirección o Superadmin que te agregue a uno.</p>
+          <p className="text-[13px] text-gray-500">Pedile a un administrador de tablero, a Dirección o a Superadmin que te agregue a uno.</p>
         </div>
       )}
 
       {tableroActivo && (
         <>
-          {/* ── Miembros del tablero + "Solo mis tareas" ── */}
+          {/* ── Miembros del tablero + "Solo mis tareas" / "Solo tareas abiertas" ── */}
           <div className="bg-white rounded-xl border shadow-sm p-3.5 flex items-center justify-between gap-4 flex-wrap"
             style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
             <div className="flex items-center gap-3 min-w-0 flex-wrap">
-              <div className="flex -space-x-2 flex-shrink-0">
-                {tableroActivo.miembros.slice(0, 5).map((m, i) => (
-                  <div key={m.id} title={m.nombre}
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-[10.5px] font-bold text-white border-2 border-white flex-shrink-0"
-                    style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>
-                    {(m.nombre || '?').trim().slice(0, 1).toUpperCase()}
-                  </div>
-                ))}
-                {tableroActivo.miembros.length > 5 && (
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-gray-600 bg-gray-200 border-2 border-white flex-shrink-0">
-                    +{tableroActivo.miembros.length - 5}
-                  </div>
-                )}
-              </div>
-              <p className="text-[12.5px] text-gray-500">
-                {tableroActivo.miembros.length} {tableroActivo.miembros.length === 1 ? 'miembro ve' : 'miembros ven'} este tablero
-              </p>
-              {!adminUser && (
-                <button onClick={() => setVerMiembrosOpen(true)}
-                  className="flex items-center gap-1.5 text-[12.5px] font-semibold flex-shrink-0" style={{ color: '#0F6E56' }}>
-                  <Users size={13} /> Ver miembros
+              {/* Avatares + contador: abren los miembros del tablero */}
+              <button type="button" onClick={() => setMiembrosTableroId(tableroActivo.id)}
+                className="flex items-center gap-3 min-w-0 rounded-lg -m-1 p-1 hover:bg-gray-50 transition-colors" title="Ver miembros">
+                <div className="flex -space-x-2 flex-shrink-0">
+                  {tableroActivo.miembros.slice(0, 5).map((m, i) => (
+                    <div key={m.id} title={m.es_admin ? `${m.nombre} · Administrador` : m.nombre}
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-[10.5px] font-bold text-white border-2 border-white flex-shrink-0"
+                      style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>
+                      {(m.nombre || '?').trim().slice(0, 1).toUpperCase()}
+                    </div>
+                  ))}
+                  {tableroActivo.miembros.length > 5 && (
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-gray-600 bg-gray-200 border-2 border-white flex-shrink-0">
+                      +{tableroActivo.miembros.length - 5}
+                    </div>
+                  )}
+                </div>
+                <p className="text-[12.5px] text-gray-500 text-left">
+                  {tableroActivo.miembros.length} {tableroActivo.miembros.length === 1 ? 'miembro ve' : 'miembros ven'} este tablero
+                </p>
+              </button>
+              <button onClick={() => setMiembrosTableroId(tableroActivo.id)}
+                className="flex items-center gap-1.5 text-[12.5px] font-semibold flex-shrink-0" style={{ color: '#0F6E56' }}>
+                {tableroActivo.permisos?.puede_agregar_miembros || tableroActivo.permisos?.puede_administrar_permisos
+                  ? <><UserCog size={13} /> Gestionar miembros</>
+                  : <><Users size={13} /> Ver miembros</>}
+              </button>
+              {tableroActivo.permisos?.puede_regularizar_admin && (
+                <button onClick={() => setMiembrosTableroId(tableroActivo.id)}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold flex-shrink-0"
+                  style={{ background: '#FEF3C7', color: '#92400E' }} title="Designar un administrador para este tablero">
+                  <ShieldAlert size={11} /> Sin administrador
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-2.5 flex-shrink-0">
-              <span className="text-[12.5px] font-medium text-gray-600">Solo mis tareas</span>
-              <button type="button" role="switch" aria-checked={soloMisTareas}
-                onClick={() => setSoloMisTareas(v => !v)}
-                className="relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors cursor-pointer"
-                style={{ background: soloMisTareas ? '#0F6E56' : '#D1D5DB' }}>
-                <span className="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"
-                  style={{ transform: soloMisTareas ? 'translateX(18px)' : 'translateX(3px)' }} />
-              </button>
+            <div className="flex items-center gap-x-5 gap-y-2 flex-wrap">
+              <Interruptor label="Solo mis tareas"      activo={soloMisTareas} onChange={setSoloMisTareas} />
+              <Interruptor label="Solo tareas abiertas" activo={soloAbiertas}  onChange={setSoloAbiertas} />
             </div>
           </div>
 
           {/* ── Métricas ── */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          {/* Completadas / Canceladas: totales históricos (métricas) y acceso al
+              historial. Con "Solo tareas abiertas" no hay finalizadas que mostrar. */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             <StatCard label="Total tareas" value={metricas?.total                       ?? '—'} icon={Briefcase}     color="#6366F1" />
             <StatCard label="Pendientes"   value={metricas?.porTipoBase?.pendiente      ?? '—'} icon={AlertCircle}   color="#EF9F27" />
             <StatCard label="En proceso"   value={metricas?.porTipoBase?.en_curso       ?? '—'} icon={Clock}         color="#0EA5E9" />
-            <StatCard label="Completadas"  value={metricas?.porTipoBase?.completada     ?? '—'} icon={CheckCircle}   color="#1D9E75" />
+            {['completada', 'cancelada'].map(tipo => (
+              <StatCard key={tipo}
+                label={tipo === 'completada' ? 'Completadas' : 'Canceladas'}
+                value={metricas?.porTipoBase?.[tipo] ?? '—'}
+                icon={FINALIZADAS_CFG[tipo].icon} color={FINALIZADAS_CFG[tipo].color}
+                {...(soloAbiertas
+                  ? { title: 'Desactivá "Solo tareas abiertas" para ver el historial' }
+                  : { onClick: () => setFinalizadasTipo(tipo), hint: 'Ver historial', title: 'Incluye las finalizadas hace más de 7 días' })} />
+            ))}
             <StatCard label="Vencidas"     value={loading ? '—' : (metricas?.vencidas ?? 0)} icon={AlertTriangle} color="#DC2626"
               onClick={() => setFiltroVencidas(v => !v)} active={filtroVencidas} />
           </div>
+          {(search || filtroPrioridad !== 'Todos' || filtroResponsable) && (
+            <p className="text-[11.5px] text-gray-400 -mt-3">
+              Las métricas no consideran la búsqueda, la prioridad ni el responsable: esos filtros solo aplican a las tarjetas.
+            </p>
+          )}
 
-          {/* ── Tabs: Tablero / Propuestas ── */}
+          {/* ── Tabs: Tablero / Propuestas — con Propuestas deshabilitado, una sola vista sin selector ── */}
+          {ENABLE_PROPUESTAS && (
           <div className="flex gap-1 bg-white rounded-xl p-1 shadow-sm border w-fit"
             style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
             {[
@@ -1305,14 +1597,15 @@ export default function OperationsModule({ user }) {
               )
             })}
           </div>
+          )}
 
           {/* ── Vista: Propuestas ── */}
-          {vista === 'propuestas' && (
+          {vistaActiva === 'propuestas' && (
             <PropuestasView user={user} tableroId={tableroActivoId} onKanbanRefresh={cargar} />
           )}
 
           {/* ── Vista: Tablero Kanban ── */}
-          {vista === 'kanban' && (
+          {vistaActiva === 'kanban' && (
             <>
           {/* Filtros */}
           <div className="bg-white rounded-xl border shadow-sm p-4 space-y-2"
@@ -1474,7 +1767,7 @@ export default function OperationsModule({ user }) {
           tableroId={tableroActivoId}
           user={user}
           onClose={cerrarModal}
-          onSaved={() => { cerrarModal(); cargar() }}
+          onSaved={() => { cerrarModal(); cargar(); setFinalizadasVersion(v => v + 1) }}
         />
       )}
 
@@ -1490,25 +1783,46 @@ export default function OperationsModule({ user }) {
       <TableroModal
         open={tableroModalOpen}
         tablero={tableroEditando}
+        user={user}
         onClose={() => setTableroModalOpen(false)}
         onSaved={handleTableroGuardado}
       />
 
-      {/* ── Ver miembros del tablero — solo lectura ── */}
-      {verMiembrosOpen && tableroActivo && (
+      {/* ── Miembros del tablero: lectura para todos, acciones según permisos ── */}
+      {miembrosTablero && (
         <VerMiembrosModal
-          tablero={tableroActivo}
-          onClose={() => setVerMiembrosOpen(false)}
+          tablero={miembrosTablero}
+          user={user}
+          onClose={() => setMiembrosTableroId(null)}
+          onActualizado={handleMiembrosActualizado}
+          onError={handleMiembrosError}
         />
       )}
 
-      {/* ── Aviso breve (ej. se perdió acceso al tablero activo) ── */}
+      {/* ── Aviso breve (operaciones de miembros, o se perdió acceso al tablero activo) ── */}
       {aviso && (
-        <div className="fixed bottom-6 right-6 flex items-center gap-2 text-white text-[13px] font-medium px-4 py-3 rounded-xl shadow-lg z-[60]"
+        <div className="fixed bottom-6 right-6 flex items-center gap-2 text-white text-[13px] font-medium px-4 py-3 rounded-xl shadow-lg z-[60] max-w-[calc(100vw-3rem)]"
           style={{ background: '#04342C' }}>
-          <AlertTriangle size={15} style={{ color: '#FCD34D' }} />
-          {aviso}
+          {aviso.tipo === 'ok'
+            ? <CheckCircle size={15} className="flex-shrink-0" style={{ color: '#6EE7B7' }} />
+            : aviso.tipo === 'error'
+              ? <XCircle size={15} className="flex-shrink-0" style={{ color: '#FCA5A5' }} />
+              : <AlertTriangle size={15} className="flex-shrink-0" style={{ color: '#FCD34D' }} />}
+          {aviso.message}
         </div>
+      )}
+
+      {/* ── Historial de completadas / canceladas ── */}
+      {finalizadasTipo && tableroActivoId && !soloAbiertas && (
+        <ModalFinalizadas
+          tipo={finalizadasTipo}
+          tableroId={tableroActivoId}
+          soloMias={soloMisTareas}
+          version={finalizadasVersion}
+          onClose={() => setFinalizadasTipo(null)}
+          onEditar={abrirEditar}
+          onHistorial={setTareaHistorial}
+        />
       )}
 
       {/* ── Modal historial de cambios — solo lectura ── */}
