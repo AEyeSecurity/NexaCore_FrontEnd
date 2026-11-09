@@ -59,3 +59,15 @@ No se probaron interacciones de navegador ni se realizaron operaciones contra un
 6. Respuestas 400/401/403/404/409 del servidor y sus notificaciones.
 
 Sin nuevas dependencias, commit ni push.
+
+## Contrato 2026-11-09 r2: tiempos manuales, menciones y notificaciones
+
+Integra `NexaCore_BackEnd/docs/operativo-actualizaciones-contratos.md` (r2). **Las migraciones del 09/11 no están aplicadas**: nada de esto se validó contra un backend real.
+
+- Kanban: `AccionesTarjeta.jsx` (barra inferior, botones de 36 px, íconos de 16 px; Actualizaciones con texto) en tarjetas y finalizadas, mismas condiciones de visibilidad. `IndicadorTemporizador` con una sola llamada `GET /tareas/temporizadores-activos?tablero_id` por carga del tablero, al iniciar/detener y al cerrar el panel.
+- Panel: título de la tarea como encabezado, temporizador con botón Iniciar/Detener de 44 px, historial con separadores por día que abre en lo más reciente, registros de tiempo diferenciados (origen, corregido, cierre automático, horario), pestañas Comentario / Registrar tiempo, foco atrapado en todos los controles y Escape que cierra primero lo secundario.
+- Tiempo (`RegistroTiempoForm.jsx`): fecha+hora locales → ISO con offset (`instanteLocal`), `POST …/validar` → confirmación de superposición dentro del panel → `POST` o `PATCH` con `version` (solo campos modificados). `VERSION_DESACTUALIZADA` recarga y reabre con la versión nueva. Correcciones visibles con `GET …/correcciones`.
+- Menciones (`menciones.js`, `ComposerMenciones.jsx`): el editor muestra `@Nombre` y serializa `@[Nombre](uuid)` solo para personas elegidas del selector (`GET /:id/mencionables`). El contador de 2000 cuenta el texto serializado. El render usa `menciones` de la respuesta (nombre actual; las no vigentes quedan como texto).
+- Notificaciones (`lib/notificacionesStore.js`, `lib/notificaciones.js`): sección Menciones en la misma campana. Contador = alertas visibles + `no_leidas` del backend (cada 60 s, pestaña visible). Marcar una / todas, "Ver más", estados disponible / mención quitada / comentario eliminado / sin acceso.
+- Navegación: `App.navigate('operations', { tablero_id, tarea_id, comentario_id, aviso })` → tablero → tarea → panel → comentario resaltado (`navegacion.js`).
+- `api.js`: los errores agregan `err.codigo` solo cuando el backend lo envía; el resto de los módulos no cambia.

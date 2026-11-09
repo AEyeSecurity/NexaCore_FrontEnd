@@ -7,6 +7,9 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../../lib/api'
 import ActualizacionesPanel from './ActualizacionesPanel'
+import AccionesTarjeta, { IndicadorTemporizador } from './AccionesTarjeta'
+import { indexarTemporizadores } from './actualizaciones'
+import { MENSAJES_DESTINO, mensajeErrorDestino, normalizarDestinoTarea, pasoDestino } from './navegacion'
 import EtapasConfigModal from './EtapasConfigModal'
 import TableroModal from './TableroModal'
 import VerMiembrosModal, { mensajeErrorMiembros } from './VerMiembrosModal'
@@ -371,7 +374,7 @@ function ModalHistorial({ tarea, onClose }) {
 }
 
 // ── TareaCard ─────────────────────────────────────────────────────────────────
-function TareaCard({ tarea, etapas, onEditar, onEliminar, onCambiarEtapa, onActualizaciones, onHistorial, onDragStart, onDragEnd, isDragging }) {
+function TareaCard({ tarea, etapas, temporizador, onEditar, onEliminar, onCambiarEtapa, onActualizaciones, onHistorial, onDragStart, onDragEnd, isDragging }) {
   const [cambiando, setCambiando] = useState(false)
   const prioCfg = PRIORIDAD_CFG[tarea.prioridad] || { background: '#F3F4F6', color: '#4B5563' }
   const etapa = tarea.operativo_etapas
@@ -397,27 +400,8 @@ function TareaCard({ tarea, etapas, onEditar, onEliminar, onCambiarEtapa, onActu
         opacity: isDragging ? 0.4 : 1,
       }}
     >
-      <div className="flex items-start justify-between gap-2">
-        <p className="font-semibold text-gray-800 text-[13.5px] leading-snug flex-1">{tarea.titulo}</p>
-        <div className="flex gap-1 shrink-0">
-          <button onClick={() => onActualizaciones(tarea)} aria-label="Actualizaciones"
-            className="p-1 rounded-lg text-gray-300 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="Actualizaciones">
-            <MessageSquare size={12} />
-          </button>
-          <button onClick={() => onHistorial(tarea)}
-            className="p-1 rounded-lg text-gray-300 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="Historial">
-            <History size={12} />
-          </button>
-          <button onClick={() => onEditar(tarea)}
-            className="p-1 rounded-lg text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors" title="Editar">
-            <Edit2 size={12} />
-          </button>
-          <button onClick={() => onEliminar(tarea)}
-            className="p-1 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors" title="Eliminar">
-            <Trash2 size={12} />
-          </button>
-        </div>
-      </div>
+      {/* El título ocupa todo el ancho: las acciones están en la barra inferior. */}
+      <p className="font-semibold text-gray-800 text-[13.5px] leading-snug break-words">{tarea.titulo}</p>
 
       {tarea.descripcion && (
         <p className="text-[12px] text-gray-500 leading-relaxed line-clamp-2">{tarea.descripcion}</p>
@@ -437,6 +421,7 @@ function TareaCard({ tarea, etapas, onEditar, onEliminar, onCambiarEtapa, onActu
       </div>
 
       <div className="space-y-1">
+        <IndicadorTemporizador temporizador={temporizador} />
         <ResponsablesLinea tarea={tarea} />
         {tarea.fecha_limite && (
           <div className="flex items-center gap-1.5 text-[11.5px]"
@@ -476,6 +461,12 @@ function TareaCard({ tarea, etapas, onEditar, onEliminar, onCambiarEtapa, onActu
       >
         {etapas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
       </select>
+
+      <AccionesTarjeta titulo={tarea.titulo}
+        onActualizaciones={() => onActualizaciones(tarea)}
+        onHistorial={() => onHistorial(tarea)}
+        onEditar={() => onEditar(tarea)}
+        onEliminar={() => onEliminar(tarea)} />
     </div>
   )
 }
@@ -546,23 +537,7 @@ function ModalFinalizadas({ tipo, tableroId, soloMias, version, onClose, onEdita
     return (
       <div key={t.id} className="rounded-xl border p-4 space-y-2"
         style={{ borderColor: 'rgba(15,110,86,0.12)' }}>
-        <div className="flex items-start justify-between gap-2">
-          <p className="font-semibold text-gray-800 text-[13.5px] leading-snug flex-1">{t.titulo}</p>
-          <div className="flex gap-1 shrink-0">
-            <button onClick={() => onActualizaciones(t)} aria-label="Actualizaciones"
-              className="p-1 rounded-lg text-gray-300 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="Actualizaciones">
-              <MessageSquare size={12} />
-            </button>
-            <button onClick={() => onHistorial(t)}
-              className="p-1 rounded-lg text-gray-300 hover:text-teal-600 hover:bg-teal-50 transition-colors" title="Historial">
-              <History size={12} />
-            </button>
-            <button onClick={() => onEditar(t)}
-              className="p-1 rounded-lg text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors" title="Ver / editar">
-              <Edit2 size={12} />
-            </button>
-          </div>
-        </div>
+        <p className="font-semibold text-gray-800 text-[13.5px] leading-snug break-words">{t.titulo}</p>
         {t.descripcion && (
           <p className="text-[12px] text-gray-500 leading-relaxed line-clamp-2">{t.descripcion}</p>
         )}
@@ -578,6 +553,11 @@ function ModalFinalizadas({ tipo, tableroId, soloMias, version, onClose, onEdita
           </span>
         </div>
         <ResponsablesLinea tarea={t} />
+        {/* Mismas acciones que antes en el historial: sin Eliminar. */}
+        <AccionesTarjeta titulo={t.titulo} editarLabel="Ver / editar"
+          onActualizaciones={() => onActualizaciones(t)}
+          onHistorial={() => onHistorial(t)}
+          onEditar={() => onEditar(t)} />
       </div>
     )
   }
@@ -1181,7 +1161,9 @@ function PropuestasView({ user, tableroId, onKanbanRefresh }) {
 }
 
 // ── OperationsModule ──────────────────────────────────────────────────────────
-export default function OperationsModule({ user }) {
+// `destino` (opcional): { id, tablero_id, tarea_id, comentario_id, aviso } —
+// navegación directa desde una notificación (App.navigate('operations', opts)).
+export default function OperationsModule({ user, destino = null }) {
   const [tareas,    setTareas]    = useState([])
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState(null)
@@ -1214,6 +1196,10 @@ export default function OperationsModule({ user }) {
   const [tareaActualizaciones, setTareaActualizaciones] = useState(null)
   const [actualizacionesVersion, setActualizacionesVersion] = useState(0)
   const [tareaHistorial, setTareaHistorial] = useState(null)
+  // Panel abierto desde una notificación: comentario a resaltar y aviso.
+  const [destinoPanel, setDestinoPanel] = useState(null)
+  // Temporizadores activos del usuario en el tablero: tarea_id → temporizador.
+  const [temporizadores, setTemporizadores] = useState(() => new Map())
   // historial de finalizadas: 'completada' | 'cancelada' | null = cerrado
   const [finalizadasTipo,    setFinalizadasTipo]    = useState(null)
   const [finalizadasVersion, setFinalizadasVersion] = useState(0)
@@ -1280,13 +1266,31 @@ export default function OperationsModule({ user }) {
   const tableroActivo = tableros.find(t => t.id === tableroActivoId) || null
 
   // El historial de finalizadas es del tablero activo: si cambia, se cierra.
-  useEffect(() => { setFinalizadasTipo(null); setTareaActualizaciones(null) }, [tableroActivoId, user?.id])
+  useEffect(() => { setFinalizadasTipo(null); setTareaActualizaciones(null); setDestinoPanel(null) }, [tableroActivoId, user?.id])
+
+  // Indicador de temporizador: una sola llamada por tablero (no por tarjeta).
+  // Un fallo (p. ej. endpoint todavía no desplegado) no afecta al tablero: se
+  // conserva lo último conocido de ese tablero. Al cambiar de tablero o de
+  // usuario se vacía antes de pedir, para no mostrar datos de otro contexto.
+  const cargaTemporizadores = useRef(0)
+  const cargarTemporizadores = useCallback(async () => {
+    const carga = ++cargaTemporizadores.current
+    if (!tableroActivoId) { setTemporizadores(new Map()); return }
+    try {
+      const r = await api.getTemporizadoresActivos(tableroActivoId)
+      if (carga === cargaTemporizadores.current) {
+        setTemporizadores(indexarTemporizadores(r, { tableroId: tableroActivoId, usuarioId: user?.id }))
+      }
+    } catch { /* el indicador es complementario: sin datos, no se muestra */ }
+  }, [tableroActivoId, user?.id])
+  useEffect(() => { cargaTemporizadores.current++; setTemporizadores(new Map()) }, [tableroActivoId, user?.id])
 
   // Cambiar de tablero o de filtro recarga: solo se aplica la respuesta más reciente.
   const cargaActual = useRef(0)
 
   const cargar = useCallback(async () => {
     setActualizacionesVersion(v => v + 1)
+    cargarTemporizadores()
     const carga = ++cargaActual.current
     if (!tableroActivoId) {
       setTareas([]); setPropuestasCount(0); setMetricas(null); setError(null); setLoading(false)
@@ -1342,9 +1346,47 @@ export default function OperationsModule({ user }) {
     if (rEtapas.status === 'fulfilled') setEtapas(rEtapas.value.data || [])
     if (rMetricas.status === 'fulfilled') setMetricas(rMetricas.value)
     setLoading(false)
-  }, [user, filtroResponsable, tableroActivoId, soloMisTareas, soloAbiertas, cargarTableros, showAviso])
+  }, [user, filtroResponsable, tableroActivoId, soloMisTareas, soloAbiertas, cargarTableros, showAviso, cargarTemporizadores])
 
   useEffect(() => { cargar() }, [cargar])
+
+  const abrirActualizaciones = useCallback((t) => { setDestinoPanel(null); setTareaActualizaciones(t) }, [])
+  const cerrarActualizaciones = () => { setTareaActualizaciones(null); setDestinoPanel(null); cargarTemporizadores() }
+
+  // ── Navegación directa (notificaciones) ──────────────────────────────
+  // tablero → tarea → panel → comentario. La tarea se busca en el listado del
+  // tablero (el mismo pedido que usa el panel, sin vista ni filtros: incluye
+  // finalizadas antiguas). Sin acceso o inexistente: aviso, sin abrir nada.
+  const [destinoPendiente, setDestinoPendiente] = useState(null)
+  const destinoSeq = useRef(0)
+  const tableroActivoRef = useRef(tableroActivoId)
+  tableroActivoRef.current = tableroActivoId
+  useEffect(() => {
+    const d = normalizarDestinoTarea(destino)
+    if (d) setDestinoPendiente({ ...d, id: destino.id })
+  }, [destino?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!destinoPendiente) return
+    const paso = pasoDestino(destinoPendiente, { tableros, tablerosCargando: tablerosLoading || !!tablerosError, tableroActivoId })
+    if (paso === 'esperar') return
+    if (paso === 'sin_tablero') { setDestinoPendiente(null); showAviso(MENSAJES_DESTINO.sin_tablero, 'error'); return }
+    setVista('kanban')
+    if (paso === 'seleccionar_tablero') { seleccionarTablero(destinoPendiente.tablero_id); return }
+    const d = destinoPendiente
+    const n = ++destinoSeq.current
+    setDestinoPendiente(null)
+    setFinalizadasTipo(null); setTareaHistorial(null)
+    api.getTareas({ tablero_id: d.tablero_id })
+      .then(r => {
+        if (n !== destinoSeq.current || tableroActivoRef.current !== d.tablero_id) return
+        const t = (r.data ?? []).find(x => x.id === d.tarea_id)
+        if (!t) { showAviso(MENSAJES_DESTINO.sin_tarea, 'error'); return }
+        setDestinoPanel({ comentario_id: d.comentario_id, aviso: d.aviso, nonce: d.id })
+        setTareaActualizaciones(t)
+      })
+      .catch(e => { if (n === destinoSeq.current) showAviso(mensajeErrorDestino(e), 'error') })
+  }, [destinoPendiente, tableros, tablerosLoading, tablerosError, tableroActivoId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const abrirNuevoTablero    = () => { setTableroEditando(null);        setTableroModalOpen(true) }
   const abrirEditarTablero   = () => { setTableroEditando(tableroActivo); setTableroModalOpen(true) }
@@ -1737,11 +1779,12 @@ export default function OperationsModule({ user }) {
                       <div className="px-3 pb-3 space-y-3">
                         {colTareas.map(t => (
                           <TareaCard key={t.id} tarea={t} etapas={etapas}
+                            temporizador={temporizadores.get(t.id)}
                             onEditar={abrirEditar}
                             onEliminar={setConfirmDelete}
                             onCambiarEtapa={handleCambiarEtapa}
                             onHistorial={setTareaHistorial}
-                            onActualizaciones={setTareaActualizaciones}
+                            onActualizaciones={abrirActualizaciones}
                             isDragging={draggedTareaId === t.id}
                             onDragStart={() => setDraggedTareaId(t.id)}
                             onDragEnd={() => setDraggedTareaId(null)} />
@@ -1835,14 +1878,16 @@ export default function OperationsModule({ user }) {
           onClose={() => setFinalizadasTipo(null)}
           onEditar={abrirEditar}
           onHistorial={setTareaHistorial}
-          onActualizaciones={setTareaActualizaciones}
+          onActualizaciones={abrirActualizaciones}
         />
       )}
 
       {tareaActualizaciones && (
-        <ActualizacionesPanel key={`${user?.id}:${tareaActualizaciones.id}`}
+        <ActualizacionesPanel key={`${user?.id}:${tareaActualizaciones.id}:${destinoPanel?.nonce ?? ''}`}
           tarea={tareaActualizaciones} tableroId={tableroActivoId} version={actualizacionesVersion}
-          onClose={() => setTareaActualizaciones(null)} />
+          comentarioDestacado={destinoPanel?.comentario_id ?? null} avisoInicial={destinoPanel?.aviso ?? null}
+          onTemporizadorCambio={cargarTemporizadores}
+          onClose={cerrarActualizaciones} />
       )}
 
       {/* ── Modal historial de cambios — solo lectura ── */}

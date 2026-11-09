@@ -117,11 +117,25 @@ export function alertasVisibles(estado) {
   return descartadas.length ? alertas.filter(a => !descartadas.includes(a.id)) : alertas
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 // Destinos conocidos de la navegación interna. Cualquier otro `destino` se
-// ignora (no se interpreta como URL ni como página arbitraria).
+// ignora (no se interpreta como URL ni como página arbitraria). Un destino de
+// Operativo con tablero y tarea (notificaciones de menciones) abre esa tarea;
+// las alertas de Operativo (sin ids) siguen abriendo solo el módulo.
 export function resolverDestino(destino) {
   if (destino?.modulo === 'finance' && (destino.seccion === 'deudas' || destino.seccion === 'comprobantes')) {
     return { page: 'finance', opts: { tab: destino.seccion } }
+  }
+  if (destino?.modulo === 'operations' && UUID.test(destino.tablero_id ?? '') && UUID.test(destino.tarea_id ?? '')) {
+    return {
+      page: 'operations',
+      opts: {
+        tablero_id: destino.tablero_id,
+        tarea_id: destino.tarea_id,
+        comentario_id: UUID.test(destino.comentario_id ?? '') ? destino.comentario_id : null,
+      },
+    }
   }
   if (destino?.modulo === 'operations')  return { page: 'operations', opts: {} }
   if (destino?.modulo === 'indicadores') return { page: 'indicadores', opts: {} }
