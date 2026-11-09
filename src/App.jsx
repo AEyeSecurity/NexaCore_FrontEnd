@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { logout, getSession } from './lib/auth'
 import { supabase } from './lib/supabase'
 import { api } from './lib/api'
@@ -20,6 +20,7 @@ import { NexiProvider } from './context/NexiContext'
 import NexiWidget from './components/nexi/NexiWidget'
 import { getAllowedPages, prefetchAllowedModules, clearAllowedModules } from './lib/permissions'
 import { useAlertasAutoRefresh, clearAlertas } from './lib/alertas'
+import { useNotificacionesAutoRefresh, clearNotificaciones } from './lib/notificaciones'
 
 // Páginas que renderiza Layout. Cualquier otro valor de `page` vuelve a Inicio.
 const LAYOUT_PAGES = new Set([
@@ -34,6 +35,11 @@ export default function App() {
   // FinanceModule lee initialTab solo al montarse: navegar a una pestaña
   // concreta (ej. desde una alerta) estando ya en Finanzas lo remonta.
   const [financeNavKey, setFinanceNavKey] = useState(0)
+  // Operativo: destino directo a una tarea (desde una notificación). Cada
+  // navegación lleva un id nuevo para que el módulo la atienda una sola vez,
+  // sin remontarse (conserva tablero activo y filtros).
+  const [operationsDestino, setOperationsDestino] = useState(null)
+  const destinoSeq = useRef(0)
   const [authLoading, setAuthLoading] = useState(true)
   // Estado dedicado para el flujo OAuth callback.
   // Necesario porque cuando el acceso es denegado, user y page ya tienen
@@ -66,6 +72,8 @@ export default function App() {
       if (event === 'SIGNED_OUT') {
         clearAllowedModules()
         clearAlertas()
+        clearNotificaciones()
+        setOperationsDestino(null)
         setUser(null)
         setPage('home')
       }
@@ -98,12 +106,17 @@ export default function App() {
   // Alertas: se piden al iniciar sesión, al volver a la pestaña y cada 3 min
   // con la pestaña visible. Sin sesión no hay pedidos.
   useAlertasAutoRefresh(userEmail)
+  // Menciones: contador cada 60 s con la pestaña visible (misma clave de sesión).
+  useNotificacionesAutoRefresh(userEmail)
 
   const navigate = (targetPage, opts = {}) => {
     // Al navegar a Finance, registrar el tab inicial si se indica; limpiar si no
     if (targetPage === 'finance') {
       setFinanceInitialTab(opts?.tab ?? null)
       if (opts?.tab) setFinanceNavKey(k => k + 1)
+    }
+    if (targetPage === 'operations') {
+      setOperationsDestino(opts?.tarea_id ? { ...opts, id: ++destinoSeq.current } : null)
     }
     setPage(targetPage)
   }
@@ -113,6 +126,8 @@ export default function App() {
   const handleLogin = (session) => {
     clearAllowedModules()
     clearAlertas()
+    clearNotificaciones()
+    setOperationsDestino(null)
     prefetchAllowedModules(session?.email)
     setUser(session)
     setPage('home')
@@ -120,6 +135,8 @@ export default function App() {
   const handleLogout = async () => {
     clearAllowedModules()
     clearAlertas()
+    clearNotificaciones()
+    setOperationsDestino(null)
     await logout()
     setUser(null)
     setPage('home')
@@ -136,6 +153,7 @@ export default function App() {
         onDeny={() => {
           clearAllowedModules()
           clearAlertas()
+          clearNotificaciones()
           setIsOAuthCallback(false)
           setUser(null)
         }}
@@ -162,7 +180,7 @@ export default function App() {
       {page === 'dashboard'     && <DashboardHub onNavigate={navigate} user={user} />}
       {page === 'indicadores'   && <IndicadoresModule />}
       {page === 'finance'       && <FinanceModule key={financeNavKey} user={user} initialTab={financeInitialTab} />}
-      {page === 'operations'    && <OperationsModule user={user} />}
+      {page === 'operations'    && <OperationsModule user={user} destino={operationsDestino} />}
       {page === 'crm'           && (() => {
         const ap = getAllowedPages(user?.role)
         return (ap === null || ap.includes('crm'))

@@ -34,6 +34,9 @@ async function request(path, options = {}) {
   if (!res.ok) {
     const err = new Error(data.error || 'Error en la solicitud')
     err.status = res.status
+    // `codigo` (aditivo): solo lo envían los endpoints de Actualizaciones del
+    // Operativo y /api/notificaciones. El resto de los módulos no lo recibe.
+    if (typeof data.codigo === 'string' && data.codigo) err.codigo = data.codigo
     throw err
   }
   return data
@@ -223,6 +226,15 @@ export const api = {
   getTemporizadorTarea: (id) => request(`/api/operations/tareas/${id}/temporizador`),
   iniciarTemporizadorTarea: (id) => request(`/api/operations/tareas/${id}/temporizador/iniciar`, { method: 'POST' }),
   detenerTemporizadorTarea: (id) => request(`/api/operations/tareas/${id}/temporizador/detener`, { method: 'POST' }),
+  // Contrato 2026-11-09 r2 (NexaCore_BackEnd/docs/operativo-actualizaciones-contratos.md).
+  // Temporizadores activos del usuario autenticado en un tablero (indicador de tarjetas).
+  getTemporizadoresActivos: (tableroId) => request(`/api/operations/tareas/temporizadores-activos?tablero_id=${encodeURIComponent(tableroId)}`),
+  getMencionablesTarea: (id) => request(`/api/operations/tareas/${id}/mencionables`),
+  // Registros de tiempo: { inicio, fin } ISO 8601 con zona horaria; PATCH además `version`.
+  validarRegistroTiempo: (id, body) => request(`/api/operations/tareas/${id}/registros-tiempo/validar`, { method: 'POST', body: JSON.stringify(body) }),
+  crearRegistroTiempo: (id, body) => request(`/api/operations/tareas/${id}/registros-tiempo`, { method: 'POST', body: JSON.stringify(body) }),
+  corregirRegistroTiempo: (id, registroId, body) => request(`/api/operations/tareas/${id}/registros-tiempo/${registroId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  getCorreccionesRegistro: (id, registroId) => request(`/api/operations/tareas/${id}/registros-tiempo/${registroId}/correcciones`),
 
 
   getPropuestas: (params = {}) => {
@@ -256,6 +268,12 @@ export const api = {
 
   // ── Alertas dinámicas (filtradas por permisos en el backend) ──
   getAlertas: () => request('/api/alertas'),
+  // Notificaciones persistentes (menciones). Contrato r2, sección 4.
+  getNotificaciones: ({ estado = 'todas', limite = 20, offset = 0 } = {}) =>
+    request(`/api/notificaciones?${new URLSearchParams({ estado, limite: String(limite), offset: String(offset) })}`),
+  getNotificacionesNoLeidas: () => request('/api/notificaciones/no-leidas/cantidad'),
+  marcarNotificacionLeida: (id) => request(`/api/notificaciones/${id}/leida`, { method: 'PATCH' }),
+  marcarTodasNotificacionesLeidas: () => request('/api/notificaciones/marcar-todas-leidas', { method: 'POST' }),
   getUsuarios:           () => request('/api/rbac/usuarios'),
   crearUsuario:   (body)     => request('/api/rbac/usuarios',       { method: 'POST',   body: JSON.stringify(body) }),
   editarUsuario:  (id, body) => request(`/api/rbac/usuarios/${id}`, { method: 'PUT',    body: JSON.stringify(body) }),
