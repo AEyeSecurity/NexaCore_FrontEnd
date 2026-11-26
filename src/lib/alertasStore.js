@@ -124,8 +124,12 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 // Operativo con tablero y tarea (notificaciones de menciones) abre esa tarea;
 // las alertas de Operativo (sin ids) siguen abriendo solo el módulo.
 export function resolverDestino(destino) {
-  if (destino?.modulo === 'finance' && (destino.seccion === 'deudas' || destino.seccion === 'comprobantes')) {
+  if (destino?.modulo === 'finance' && ['deudas', 'comprobantes', 'suscripciones'].includes(destino.seccion)) {
     return { page: 'finance', opts: { tab: destino.seccion } }
+  }
+  // Personas externas (vencidas / por vencer): Organización abre en Organigrama.
+  if (destino?.modulo === 'organizacion' && destino.seccion === 'organigrama') {
+    return { page: 'organizacion', opts: {} }
   }
   if (destino?.modulo === 'operations' && UUID.test(destino.tablero_id ?? '') && UUID.test(destino.tarea_id ?? '')) {
     return {
@@ -144,7 +148,7 @@ export function resolverDestino(destino) {
 
 // Agrupa por módulo conservando el orden del backend (por severidad) dentro de
 // cada grupo. Los grupos siguen `ordenModulos`; los desconocidos van al final.
-export function agruparPorModulo(alertas, ordenModulos = ['finance', 'operations', 'indicadores']) {
+export function agruparPorModulo(alertas, ordenModulos = ['finance', 'operations', 'indicadores', 'organizacion']) {
   const grupos = new Map()
   for (const a of alertas) {
     if (!grupos.has(a.modulo)) grupos.set(a.modulo, [])

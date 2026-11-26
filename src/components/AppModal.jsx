@@ -7,7 +7,9 @@ import { createPortal } from 'react-dom'
  * El overlay cubre solo el área de contenido: topbar + módulo activo.
  * El sidebar queda siempre visible y nítido.
  */
-export default function AppModal({ onClose, children, maxWidth = 'max-w-lg' }) {
+// `closeOnBackdrop` (default true): permite desactivar el cierre con clic en el
+// fondo en modales que hoy no lo admiten (ej. formularios del organigrama).
+export default function AppModal({ onClose, children, maxWidth = 'max-w-lg', closeOnBackdrop = true }) {
   useEffect(() => {
     const main = document.getElementById('app-main')
     if (main) main.style.overflow = 'hidden'
@@ -22,7 +24,7 @@ export default function AppModal({ onClose, children, maxWidth = 'max-w-lg' }) {
       <div
         className="absolute inset-0 backdrop-blur-sm"
         style={{ backgroundColor: 'rgba(10, 82, 64, 0.18)' }}
-        onClick={onClose}
+        onClick={closeOnBackdrop ? onClose : undefined}
       />
       <div
         className={`relative bg-white rounded-2xl shadow-2xl w-full ${maxWidth} flex flex-col fade-in overflow-hidden`}

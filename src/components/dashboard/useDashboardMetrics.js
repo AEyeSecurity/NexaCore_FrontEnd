@@ -28,15 +28,20 @@ export function useDashboardMetrics(visibleWidgets, mes, anio) {
   const periodRef = useRef({ mes, anio })
   periodRef.current = { mes, anio }
 
-  // Solo mosaicos con `group` (los de indicador piden su propio histórico).
-  const seriesNeeded = [...new Set((visibleWidgets || []).filter(w => w?.group).map(seriesKeyFor))]
-  const seriesKey = seriesNeeded.slice().sort().join(',')
+  // Solo mosaicos con `group` (los de indicador y alertas piden sus propios datos).
+  // Los grupos `byPeriod` (Protocolos) no dependen del mes elegido: se piden
+  // una vez por period y no se recargan al cambiar el mes.
+  const allSeries = [...new Set((visibleWidgets || []).filter(w => w?.group).map(seriesKeyFor))]
+  const isByPeriod = (s) => !!WIDGET_GROUPS[s.split(':')[0]]?.byPeriod
+  const monthlySeries = allSeries.filter(s => !isByPeriod(s))
+  const periodSeries = allSeries.filter(isByPeriod)
+  const monthlyKey = monthlySeries.slice().sort().join(',')
+  const periodKey = periodSeries.slice().sort().join(',')
 
   const fetchSeries = useCallback((seriesId) => {
-    const [group, countStr] = seriesId.split(':')
+    const [group, param] = seriesId.split(':')
     const cfg = WIDGET_GROUPS[group]
     if (!cfg) return
-    const count = Number(countStr) || 1
     setMetricsBySeries(prev => ({ ...prev, [seriesId]: { ...(prev[seriesId] || {}), loading: true, error: null } }))
     const { mes, anio } = periodRef.current
 
@@ -48,6 +53,12 @@ export function useDashboardMetrics(visibleWidgets, mes, anio) {
         setMetricsBySeries(prev => ({ ...prev, [seriesId]: { loading: false, error: err.message || 'No se pudo cargar', data: null } }))
       })
 
+    if (cfg.byPeriod) {
+      finish(cfg.fetch(param || 'month'))
+      return
+    }
+
+    const count = Number(param) || 1
     if (!cfg.supportsPeriod) {
       finish(cfg.fetch({}))
       return
@@ -64,9 +75,20 @@ export function useDashboardMetrics(visibleWidgets, mes, anio) {
   }, [])
 
   useEffect(() => {
-    seriesNeeded.forEach(s => fetchSeries(s))
+    monthlySeries.forEach(s => fetchSeries(s))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seriesKey, mes, anio])
+  }, [monthlyKey, mes, anio])
+
+  // Solo los period que todavía no se pidieron: agregar otro mosaico de
+  // Protocolos con un period ya cargado reutiliza la respuesta.
+  const requestedPeriods = useRef(new Set())
+  useEffect(() => {
+    periodSeries.filter(s => !requestedPeriods.current.has(s)).forEach(s => {
+      requestedPeriods.current.add(s)
+      fetchSeries(s)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodKey])
 
   return { metricsBySeries, retrySeries: fetchSeries }
 }

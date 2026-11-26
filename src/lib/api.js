@@ -73,6 +73,15 @@ export const api = {
   // ── Dashboard personalizable ──────────────────────
   getDashboardConfig:  () => request('/api/dashboard/config'),
   saveDashboardConfig: (widgets) => request('/api/dashboard/config', { method: 'PUT', body: JSON.stringify({ widgets }) }),
+  // GET /api/dashboard/catalogo → { modules: [{ module, label, metrics: [...] }], allowedModules }
+  // Ya viene filtrado por permisos y sin mosaicos deprecados (CRM).
+  getDashboardCatalogo: () => request('/api/dashboard/catalogo'),
+  // GET /api/dashboard/protocolos?period=month|3m|6m|12m&limite=1..50 → datos de los 5 mosaicos de Protocolos.
+  getDashboardProtocolos: ({ period = 'month', limite = 10 } = {}) =>
+    request(`/api/dashboard/protocolos?${new URLSearchParams({ period, limite: String(limite) })}`),
+  // GET /api/alertas/proximas?tipos=<csv>&horizonte=7|15|30 (mosaico "Alertas próximas").
+  getAlertasProximas: ({ tipos = [], horizonte = 15 } = {}) =>
+    request(`/api/alertas/proximas?${new URLSearchParams({ tipos: tipos.join(','), horizonte: String(horizonte) })}`),
 
   // ── Dashboard: vistas personalizadas ─────────────
   // GET  /api/dashboard/views         → [{ id, nombre, orden, created_at }]

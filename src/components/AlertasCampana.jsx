@@ -18,8 +18,11 @@ import { contadorCampana, destinoNotificacion, estadoNotificacion } from '../lib
 // Contador del botón = alertas visibles (sin las descartadas) + menciones
 // pendientes según el backend (`no_leidas`). Son fuentes disjuntas: no se duplica.
 
-const MODULO_LABEL = { finance: 'Finanzas', operations: 'Operativo', indicadores: 'Indicadores' }
-const FUENTE_LABEL = { deudas: 'Deudas', comprobantes: 'Comprobantes', tareas: 'Tareas', indicadores: 'Indicadores' }
+const MODULO_LABEL = { finance: 'Finanzas', operations: 'Operativo', indicadores: 'Indicadores', organizacion: 'Organización' }
+const FUENTE_LABEL = {
+  deudas: 'Deudas', comprobantes: 'Comprobantes', tareas: 'Tareas', indicadores: 'Indicadores',
+  suscripciones: 'Suscripciones', externos: 'Personas externas',
+}
 const FOCO = 'outline-none focus-visible:ring-2 focus-visible:ring-[#1D9E75]'
 
 const SEVERIDAD_CFG = {

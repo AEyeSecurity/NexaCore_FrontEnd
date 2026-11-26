@@ -104,7 +104,7 @@ export default function DashboardHub({ user, onNavigate }) {
       <div key={activeViewId ?? '__general__'}>
         {activeViewId === null
           ? <Dashboard user={user} onNavigate={onNavigate} />
-          : <DashboardView viewId={activeViewId} user={user} />
+          : <DashboardView viewId={activeViewId} user={user} onNavigate={onNavigate} />
         }
       </div>
 
