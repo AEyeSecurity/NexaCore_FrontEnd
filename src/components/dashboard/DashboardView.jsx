@@ -35,7 +35,7 @@ function parseMesAnio(value) {
   return { mes: parseInt(mes), anio: parseInt(anio) }
 }
 
-export default function DashboardView({ viewId, user }) {
+export default function DashboardView({ viewId, onNavigate }) {
   const MESES = getMesesOptions()
   const [selectedMes, setSelectedMes] = useState(MESES[MESES.length - 1].value)
   const { mes, anio } = parseMesAnio(selectedMes)
@@ -44,7 +44,6 @@ export default function DashboardView({ viewId, user }) {
   const [configError, setConfigError]     = useState(null)
   const [viewName, setViewName]           = useState('')
   const [savedWidgets, setSavedWidgets]   = useState([])
-  const [allowedModules, setAllowedModules] = useState([])
 
   const [panelOpen, setPanelOpen] = useState(false)
   const [saving, setSaving]       = useState(false)
@@ -75,7 +74,6 @@ export default function DashboardView({ viewId, user }) {
       .then(res => {
         setViewName(res?.nombre || '')
         setSavedWidgets((res?.widgets || []).map(normalizeWidget).filter(Boolean))
-        setAllowedModules(res?.allowedModules || [])
         return res
       })
       .catch(err => setConfigError(err.message || 'No se pudo cargar la configuración de la vista'))
@@ -102,7 +100,6 @@ export default function DashboardView({ viewId, user }) {
       .then(res => {
         setViewName(res?.nombre || '')
         setSavedWidgets((res?.widgets || []).map(normalizeWidget).filter(Boolean))
-        setAllowedModules(res?.allowedModules || [])
         setPanelOpen(false)
         showToast('Configuración guardada')
       })
@@ -173,7 +170,6 @@ export default function DashboardView({ viewId, user }) {
       .then(res => {
         setViewName(res?.nombre || '')
         setSavedWidgets((res?.widgets || []).map(normalizeWidget).filter(Boolean))
-        setAllowedModules(res?.allowedModules || [])
         setEditMode(false)
         showToast('Configuración guardada')
       })
@@ -333,6 +329,7 @@ export default function DashboardView({ viewId, user }) {
                     widget={widget}
                     groupState={metricsBySeries[seriesId]}
                     onRetry={() => retrySeries(seriesId)}
+                    onNavigate={onNavigate}
                   />
                 )}
               </div>
@@ -351,8 +348,6 @@ export default function DashboardView({ viewId, user }) {
       <CreateWidgetWizard
         open={panelOpen}
         savedWidgets={savedWidgets}
-        allowedModules={allowedModules}
-        userRole={user?.role}
         saving={saving}
         saveError={saveError}
         onCancel={() => { setPanelOpen(false); setSaveError(null) }}

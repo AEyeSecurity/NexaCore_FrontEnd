@@ -5,6 +5,7 @@ import {
   Mail, Phone, ArrowLeft, Trash2, User, UserPlus, CheckCircle2
 } from 'lucide-react'
 import { api } from '../../lib/api'
+import AppModal from '../../components/AppModal'
 
 // ── Constantes de estilos ─────────────────────────────────────
 
@@ -673,6 +674,13 @@ function ModalNodo({ nodo, personas, orgNodes, onSave, onClose, saving }) {
   // Al editar no aplica (no se puede cambiar la persona de un nodo existente).
   const [step, setStep] = useState(isEdit ? 'form' : 'tipo') // 'tipo' | 'form'
 
+  // Escape cierra el modal (salvo mientras se guarda).
+  useEffect(() => {
+    const onKeyDown = (e) => { if (e.key === 'Escape' && !saving) onClose() }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose, saving])
+
   const handleSelectTipo = (tipo) => {
     setModoPersona(tipo)
     setStep('form')
@@ -703,7 +711,22 @@ function ModalNodo({ nodo, personas, orgNodes, onSave, onClose, saving }) {
       ? !!form.nombre_manual.trim()
       : (!!form.usuario_id || !!form.empleado_id)
 
+  // Persona del sistema = opción "Persona existente" (usuario y/o empleado de
+  // Sueldos). Solo las personas externas/manuales llevan fecha de vencimiento,
+  // y para ellas es obligatoria (al crear y al editar).
+  const esSistema = isEdit ? getNodeOrigen(nodo) !== 'manual' : modoPersona === 'existente'
+  const pideVencimiento = !esSistema
+  const vencimientoValido = !pideVencimiento || !!form.fecha_fin
+  const sinVencimientoPrevio = isEdit && pideVencimiento && !nodo?.fecha_fin
+
   const handleGuardar = () => {
+    if (!vencimientoValido) return
+    // Persona del sistema: la fecha de vencimiento no se muestra ni se envía.
+    if (esSistema) {
+      const { fecha_fin, ...sinVencimiento } = form
+      onSave(isEdit ? sinVencimiento : { ...sinVencimiento, es_externo: false })
+      return
+    }
     // Persona manual/externa: no se envían usuario_id/empleado_id, solo los *_manual.
     // El tipo de persona ya se definió en la pantalla inicial, así que es_externo
     // se deriva de esa elección en vez de un checkbox manual.
@@ -719,24 +742,23 @@ function ModalNodo({ nodo, personas, orgNodes, onSave, onClose, saving }) {
       })
       return
     }
-    if (!isEdit) {
-      onSave({ ...form, es_externo: false })
-      return
-    }
     onSave(form)
   }
 
+  // Mismo modal que el resto del sistema (AppModal: overlay verde con blur,
+  // montado en #app-main y con el scroll del fondo bloqueado). Un único
+  // AppModal cubre todos los pasos (tipo, existente, externa, edición), así
+  // que cambiar de paso no vuelve a montar ni libera el bloqueo de scroll.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.35)' }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
-        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'rgba(15,110,86,0.12)' }}>
+    <AppModal onClose={onClose} closeOnBackdrop={false} maxWidth="max-w-lg">
+        <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'rgba(15,110,86,0.12)' }}>
           <p className="text-[15px] font-semibold text-gray-900">
             {isEdit ? 'Editar nodo' : 'Agregar al organigrama'}
           </p>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100"><X size={16} /></button>
+          <button onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded-lg hover:bg-gray-100"><X size={16} /></button>
         </div>
 
-        <div className="overflow-y-auto max-h-[65vh] p-5 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 space-y-4">
           {/* Pantalla inicial: elegir tipo de persona (solo al crear) */}
           {!isEdit && step === 'tipo' && (
             <div>
@@ -885,24 +907,34 @@ function ModalNodo({ nodo, personas, orgNodes, onSave, onClose, saving }) {
                 </div>
               </div>
 
-              {/* Fechas */}
+              {/* Fechas (el vencimiento solo aplica a personas externas) */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[12px] font-medium text-gray-600 mb-1.5">Fecha de ingreso</label>
                   <input type="date" value={form.fecha_inicio} onChange={e => f('fecha_inicio', e.target.value)}
                     className={inputCls} style={inputStyle} />
                 </div>
-                <div>
-                  <label className="block text-[12px] font-medium text-gray-600 mb-1.5">
-                    Vencimiento
-                    <span className="text-gray-400 font-normal ml-1">(solo externos)</span>
-                  </label>
-                  <input type="date" value={form.fecha_fin} onChange={e => f('fecha_fin', e.target.value)}
-                    className={inputCls} style={inputStyle} />
-                </div>
+                {pideVencimiento && (
+                  <div>
+                    <label htmlFor="nodo-fecha-fin" className="block text-[12px] font-medium text-gray-600 mb-1.5">
+                      Vencimiento *
+                    </label>
+                    <input id="nodo-fecha-fin" type="date" value={form.fecha_fin} onChange={e => f('fecha_fin', e.target.value)}
+                      required aria-invalid={!form.fecha_fin} aria-describedby={!form.fecha_fin ? 'nodo-fecha-fin-msg' : undefined}
+                      className={inputCls}
+                      style={!form.fecha_fin ? { ...inputStyle, borderColor: '#F59E0B' } : inputStyle} />
+                    {!form.fecha_fin && (
+                      <p id="nodo-fecha-fin-msg" className="text-[11px] text-amber-700 mt-1">
+                        {sinVencimientoPrevio
+                          ? 'Esta persona externa no tiene fecha de vencimiento. Completala para poder guardar los cambios.'
+                          : 'Obligatoria para personas externas.'}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {form.fecha_fin && (
+              {pideVencimiento && form.fecha_fin && (
                 <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 text-amber-700 text-[11px]">
                   <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
                   El nodo será desactivado automáticamente al vencer la fecha indicada.
@@ -912,14 +944,14 @@ function ModalNodo({ nodo, personas, orgNodes, onSave, onClose, saving }) {
           )}
         </div>
 
-        <div className="flex justify-end gap-3 p-4 border-t" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
+        <div className="flex justify-end gap-3 p-4 border-t flex-shrink-0" style={{ borderColor: 'rgba(15,110,86,0.1)' }}>
           <button onClick={onClose}
             className="px-4 py-2 rounded-xl text-[13px] border transition-colors hover:bg-gray-50"
             style={{ borderColor: 'rgba(15,110,86,0.25)', color: '#4B5563' }}>
             Cancelar
           </button>
           {(isEdit || step === 'form') && (
-            <button onClick={handleGuardar} disabled={saving || !personaValida}
+            <button onClick={handleGuardar} disabled={saving || !personaValida || !vencimientoValido}
               className="flex items-center gap-2 px-5 py-2 rounded-xl text-[13px] text-white font-medium transition-colors disabled:opacity-50"
               style={{ background: '#0F6E56' }}>
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
@@ -927,8 +959,7 @@ function ModalNodo({ nodo, personas, orgNodes, onSave, onClose, saving }) {
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </AppModal>
   )
 }
 

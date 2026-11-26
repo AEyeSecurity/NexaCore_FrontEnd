@@ -1,24 +1,21 @@
 import {
   TrendingUp, TrendingDown, Activity, Receipt,
   Wallet, Users, Briefcase, Gauge,
+  ShieldCheck, ClipboardList, ShieldAlert, History, CalendarX, Bell,
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { formatK, fmtARS } from './format'
 import { DEFAULT_TILE_SIZE } from './widgetSizes'
+import { CATEGORIAS, CATEGORIA_LABELS } from '../../modules/protocolos/constants'
 
 const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 
-// Módulos reales (slugs) tal como los define el backend en la tabla `modulos`
-// y en dashboard/config/widgets.js. Solo se usan para agrupar visualmente el
-// panel de edición — el permiso real llega en `allowedModules` desde
-// GET /api/dashboard/config, nunca se infiere localmente por rol.
-export const MODULE_META = {
-  finance:       { label: 'Finanzas',      color: '#0F6E56' },
-  crm:           { label: 'CRM',           color: '#DB2777' },
-  operations:    { label: 'Operativo',     color: '#D97706' },
-}
+// Qué mosaicos se pueden AGREGAR (módulos, métricas, períodos y
+// visualizaciones) lo decide GET /api/dashboard/catalogo (ver wizardCatalog.js).
+// Este archivo solo define cómo se DIBUJA cada mosaico por `id`, incluidos los
+// que ya no se ofrecen (CRM, *_6m) para que los guardados se sigan viendo.
 
-// ── Contrato nuevo del backend: cada mosaico se persiste como
+// ── Contrato del backend: cada mosaico se persiste como
 //    { id, size, period, chartType }. Estos son los únicos valores válidos.
 export const DASHBOARD_PERIODS = ['month', '3m', '6m', '12m']
 
@@ -41,18 +38,30 @@ export const DASHBOARD_CHART_TYPES = ['kpi', 'area', 'bar', 'list', 'line', 'gau
 export const INDICATOR_WIDGET_ID = 'indicador_kpi'
 export const INDICATOR_CHART_TYPES = ['kpi', 'line', 'bar', 'area', 'gauge']
 
-// Matriz de compatibilidad aprobada por backend (por ID base). Sólo la usa el
-// asistente para decidir qué visualizaciones habilitar y cuál es la
-// recomendada; el render de un mosaico ya guardado se decide por su
-// `chartType` persistido. NO agrega tipos/períodos que el backend no acepte.
-export const WIDGET_CHART_MATRIX = {
-  finanzas_ingresos_mes:         { allowed: ['kpi', 'area', 'bar'], default: 'kpi' },
-  finanzas_gastos_mes:           { allowed: ['kpi', 'area', 'bar'], default: 'kpi' },
-  finanzas_resultado_neto:       { allowed: ['kpi', 'area', 'bar'], default: 'kpi' },
-  finanzas_metricas_movimientos: { allowed: ['bar', 'list'],        default: 'bar' },
-  finanzas_metricas_salarios:    { allowed: ['kpi'],                default: 'kpi' },
-  crm_metricas_contactos:        { allowed: ['kpi', 'bar', 'list'], default: 'kpi' },
-  operativo_metricas_tareas:     { allowed: ['kpi', 'bar', 'list'], default: 'kpi' },
+// Mosaico de Alertas próximas: usa horizonte (días) en vez de período.
+export const ALERTAS_WIDGET_ID = 'alertas_proximas'
+export const ALERT_TYPES = ['deudas', 'suscripciones', 'externos']
+export const ALERT_HORIZONS = [7, 15, 30]
+export const DEFAULT_ALERT_HORIZON = 15
+export const ALERT_TYPE_LABELS = {
+  deudas: 'Deudas por vencer',
+  suscripciones: 'Suscripciones por vencer',
+  externos: 'Personas externas por vencer',
+}
+
+// Cantidad de "Últimos registros" que se piden a GET /api/dashboard/protocolos.
+export const PROTOCOLOS_LIMITE = 10
+
+function fmtFechaCorta(iso) {
+  if (!iso) return ''
+  const [y, m, d] = String(iso).slice(0, 10).split('-')
+  return y && m && d ? `${d}/${m}/${y}` : ''
+}
+
+function mesCorto(mes) {
+  // "2026-09" → "sep"
+  const m = Number(String(mes || '').split('-')[1])
+  return MESES_CORTO[m - 1] || String(mes || '')
 }
 
 // Un "group" agrupa mosaicos que comparten el mismo endpoint fuente, para
@@ -137,6 +146,13 @@ export const WIDGET_GROUPS = {
       completadas: monthly.reduce((s, r) => s + Number(r?.completadas || 0), 0),
     }),
   },
+  // Protocolos: el backend ya calcula la ventana a partir de `period` (no
+  // depende del mes elegido en el Dashboard). Una sola llamada por period,
+  // compartida por los 5 mosaicos de Protocolos con ese mismo period.
+  protocolos: {
+    byPeriod: true,
+    fetch: (period) => api.getDashboardProtocolos({ period, limite: PROTOCOLOS_LIMITE }),
+  },
 }
 
 // Cantidad de meses que abarca un mosaico. Prioriza el `period` del nuevo
@@ -148,10 +164,11 @@ export function widgetMonths(widget) {
 }
 
 // Clave de la serie de datos que le corresponde a un mosaico: mosaicos del
-// mismo group y misma cantidad de meses comparten una sola llamada a la
-// fuente. Incluye los meses para que "ingresos / este mes" e
-// "ingresos / 12m" NO reutilicen datos entre sí.
+// mismo group y misma ventana comparten una sola llamada a la fuente. Incluye
+// los meses (o el period, en grupos `byPeriod`) para que "ingresos / este mes"
+// e "ingresos / 12m" NO reutilicen datos entre sí.
 export function seriesKeyFor(widget) {
+  if (WIDGET_GROUPS[widget.group]?.byPeriod) return `${widget.group}:${widget.period || 'month'}`
   return `${widget.group}:${widgetMonths(widget)}`
 }
 
@@ -446,23 +463,130 @@ export const WIDGET_CATALOG = {
       { label: 'Completadas', value: String(data?.completadas ?? 0) },
     ],
   },
+
+  // ── Protocolos: todos desde GET /api/dashboard/protocolos?period=<period> ──
+  protocolos_activos: {
+    id: 'protocolos_activos',
+    title: 'Protocolos activos',
+    question: 'Protocolos activos',
+    subtitle: 'Protocolos activos por categoría',
+    module: 'protocolos',
+    group: 'protocolos',
+    type: 'metric',
+    categorical: true,
+    valueFormat: 'count',
+    icon: ShieldCheck,
+    colors: { bg: '#EEF4FD', accent: '#3B6FD6', iconBg: '#DCE7FA' },
+    getValue: (data) => String(data?.protocolosActivos?.total ?? 0),
+    getSeries: (data) => CATEGORIAS.map(c => ({
+      label: c.label,
+      valor: Number(data?.protocolosActivos?.porCategoria?.[c.value] ?? 0),
+    })),
+  },
+  protocolos_registros: {
+    id: 'protocolos_registros',
+    title: 'Registros',
+    question: 'Registros de protocolos',
+    subtitle: 'Registros cargados por mes',
+    module: 'protocolos',
+    group: 'protocolos',
+    type: 'metric',
+    valueFormat: 'count',
+    icon: ClipboardList,
+    colors: { bg: '#F0FDFA', accent: '#0F766E', iconBg: '#CCFBF1' },
+    getValue: (data) => String(data?.registros?.total ?? 0),
+    getSeries: (data) => (data?.registros?.serie || []).map(p => ({
+      label: mesCorto(p.mes), valor: Number(p.total ?? 0),
+    })),
+  },
+  protocolos_incumplimientos: {
+    id: 'protocolos_incumplimientos',
+    title: 'Con incumplimientos',
+    question: 'Registros con incumplimientos',
+    subtitle: 'Registros con al menos un ítem fallido, por mes',
+    module: 'protocolos',
+    group: 'protocolos',
+    type: 'metric',
+    valueFormat: 'count',
+    icon: ShieldAlert,
+    colors: { bg: '#FFF7ED', accent: '#C2410C', iconBg: '#FFEDD5' },
+    getValue: (data) => fmtPorcentaje(data?.incumplimientos?.porcentaje),
+    getCaption: (data) => {
+      const inc = data?.incumplimientos
+      return `${inc?.registrosConIncumplimientos ?? 0} de ${inc?.totalRegistros ?? 0} registros`
+    },
+    getGauge: (data) => {
+      const p = Number(data?.incumplimientos?.porcentaje)
+      return Number.isFinite(p) ? Math.max(0, Math.min(100, p)) : null
+    },
+    getSeries: (data) => (data?.registros?.serie || []).map(p => ({
+      label: mesCorto(p.mes), valor: Number(p.conIncumplimientos ?? 0),
+    })),
+  },
+  protocolos_ultimos_registros: {
+    id: 'protocolos_ultimos_registros',
+    title: 'Últimos registros',
+    module: 'protocolos',
+    group: 'protocolos',
+    type: 'detail',
+    icon: History,
+    colors: { bg: '#F8FAFC', accent: '#475569', iconBg: '#E2E8F0' },
+    emptyText: 'No hay registros en el período',
+    getRows: (data) => (data?.ultimosRegistros || []).map(r => ({
+      key: r.id,
+      label: r.protocolo || 'Protocolo',
+      sublabel: [fmtFechaCorta(r.fecha), r.realizadoPor].filter(Boolean).join(' · '),
+      badge: r.conIncumplimientos
+        ? { text: `Con incumplimientos (${r.itemsFallidos ?? 0} ${Number(r.itemsFallidos) === 1 ? 'ítem' : 'ítems'})`, tone: 'danger' }
+        : { text: 'Sin incumplimientos', tone: 'ok' },
+    })),
+  },
+  protocolos_sin_registros: {
+    id: 'protocolos_sin_registros',
+    title: 'Sin registros en los últimos 30 días',
+    fixedTitle: true,
+    module: 'protocolos',
+    group: 'protocolos',
+    type: 'detail',
+    icon: CalendarX,
+    colors: { bg: '#FFFBEB', accent: '#B45309', iconBg: '#FEF3C7' },
+    emptyText: 'Todos los protocolos tienen registros recientes',
+    getRows: (data) => (data?.sinRegistrosRecientes?.protocolos || []).map(p => ({
+      key: p.id,
+      label: p.nombre || 'Protocolo',
+      sublabel: CATEGORIA_LABELS[p.categoria] || p.categoria || '',
+      value: p.ultimoRegistro ? fmtFechaCorta(p.ultimoRegistro) : 'Nunca',
+    })),
+  },
+
+  // ── Alertas próximas: GET /api/alertas/proximas (lo renderiza AlertasWidgetCard) ──
+  alertas_proximas: {
+    id: 'alertas_proximas',
+    title: 'Alertas próximas',
+    module: null,
+    usesHorizon: true,
+    type: 'alertas',
+    defaultChartType: 'list',
+    icon: Bell,
+    colors: { bg: '#FFFFFF', accent: '#0F6E56', iconBg: '#E1F5EE' },
+  },
+}
+
+function fmtPorcentaje(v) {
+  const n = Number(v)
+  if (v == null || !Number.isFinite(n)) return '—'
+  return `${Math.round(n * 10) / 10}%`.replace('.', ',')
 }
 
 export const WIDGET_IDS = Object.keys(WIDGET_CATALOG)
 
-// Espejo, solo para UX, de la regla que el backend ya aplica en
-// dashboard/services/dashboardService.js (_widgetPermitido): un mosaico se
-// puede marcar en el panel si su módulo está en `allowedModules` (fuente de
-// verdad del backend) y, si declara `requiresRole`, el rol del usuario está
-// incluido. El guardado real igual queda validado server-side (403 si no
-// corresponde) — este chequeo solo evita ofrecer opciones que van a fallar.
-export function isWidgetSelectable(widgetId, allowedModules, userRole) {
-  const widget = WIDGET_CATALOG[widgetId]
-  if (!widget) return false
-  if (!allowedModules?.includes(widget.module)) return false
-  if (widget.requiresModules && !widget.requiresModules.every(m => allowedModules.includes(m))) return false
-  if (widget.requiresRole && !widget.requiresRole.includes(userRole)) return false
-  return true
+function normalizeAlertTypes(list) {
+  const tipos = Array.isArray(list) ? ALERT_TYPES.filter(t => list.includes(t)) : []
+  return tipos.length ? tipos : [...ALERT_TYPES]
+}
+function normalizeHorizon(h) {
+  const n = Number(h)
+  return ALERT_HORIZONS.includes(n) ? n : DEFAULT_ALERT_HORIZON
 }
 
 // ── Modelo de mosaico { id, size, period, chartType } ────────────────────
@@ -499,6 +623,17 @@ export function normalizeWidget(raw, index) {
   const w = typeof raw === 'string' ? { id: raw } : (raw || {})
   const entry = WIDGET_CATALOG[w.id]
   if (!entry) return null
+  // Mosaico de Alertas: sin `period`; lleva `alertTypes` y `horizonDays`.
+  if (entry.usesHorizon) {
+    return {
+      id: w.id,
+      instanceId: w.instanceId ? String(w.instanceId) : `legacy:${w.id}${index != null ? `:${index}` : ''}`,
+      size: w.size || DEFAULT_TILE_SIZE,
+      chartType: 'list',
+      alertTypes: normalizeAlertTypes(w.alertTypes),
+      horizonDays: normalizeHorizon(w.horizonDays),
+    }
+  }
   // Mosaico de indicador: sin indicatorId no es válido (el backend tampoco
   // lo devuelve). Nunca se deduplica por indicatorId: la identidad sigue
   // siendo instanceId.
@@ -531,6 +666,13 @@ export function resolveWidget(raw, index) {
   const cfg = normalizeWidget(raw, index)
   if (!cfg) return null
   const entry = WIDGET_CATALOG[cfg.id]
+  if (entry.usesHorizon) {
+    return {
+      ...entry,
+      ...cfg,
+      title: `${entry.title} · ${cfg.horizonDays} días`,
+    }
+  }
   const periodLabel = PERIOD_LABELS[cfg.period] || ''
   // Los mosaicos legacy *_6m ya llevan el período en el título; los nuevos
   // (ID base) muestran "Métrica · ventana".
@@ -543,14 +685,25 @@ export function resolveWidget(raw, index) {
     size: cfg.size,
     ...(cfg.indicatorId ? { indicatorId: cfg.indicatorId } : {}),
     months: PERIOD_MONTHS[cfg.period] || entry.periodMonths || 1,
-    title: (!isLegacy && periodLabel) ? `${entry.title} · ${periodLabel.toLowerCase()}` : entry.title,
+    title: (!isLegacy && !entry.fixedTitle && periodLabel) ? `${entry.title} · ${periodLabel.toLowerCase()}` : entry.title,
   }
 }
 
 // Lo que se envía al backend por cada mosaico. Conserva instanceId. NO se
 // agrega `title` (el backend no lo persiste). `indicatorId` se envía SOLO en
-// mosaicos de indicador: el backend rechaza (400) indicatorId en cualquier otro.
+// mosaicos de indicador y `alertTypes`/`horizonDays` SOLO en el de Alertas
+// (que va sin `period`): el backend rechaza (400) esos campos en cualquier otro.
 export function serializeWidget(w) {
+  if (WIDGET_CATALOG[w.id]?.usesHorizon) {
+    return {
+      id: w.id,
+      instanceId: w.instanceId ? String(w.instanceId) : `legacy:${w.id}`,
+      size: w.size || DEFAULT_TILE_SIZE,
+      chartType: 'list',
+      alertTypes: normalizeAlertTypes(w.alertTypes),
+      horizonDays: normalizeHorizon(w.horizonDays),
+    }
+  }
   const out = {
     id: w.id,
     instanceId: w.instanceId ? String(w.instanceId) : `legacy:${w.id}`,

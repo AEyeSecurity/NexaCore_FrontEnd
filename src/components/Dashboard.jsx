@@ -29,7 +29,7 @@ function parseMesAnio(value) {
   return { mes: parseInt(mes), anio: parseInt(anio) }
 }
 
-export default function Dashboard({ user }) {
+export default function Dashboard({ onNavigate }) {
   const MESES = getMesesOptions()
   const [selectedMes, setSelectedMes] = useState(MESES[MESES.length - 1].value)
   const { mes, anio } = parseMesAnio(selectedMes)
@@ -38,7 +38,6 @@ export default function Dashboard({ user }) {
   const [configError, setConfigError]     = useState(null)
   const [dashboardName, setDashboardName] = useState('Panel General')
   const [savedWidgets, setSavedWidgets]   = useState([])
-  const [allowedModules, setAllowedModules] = useState([])
 
   const [panelOpen, setPanelOpen] = useState(false)
   const [saving, setSaving]       = useState(false)
@@ -74,7 +73,6 @@ export default function Dashboard({ user }) {
       .then(res => {
         setDashboardName(res?.dashboard?.name || 'Panel General')
         setSavedWidgets((res?.dashboard?.widgets || []).map(normalizeWidget).filter(Boolean))
-        setAllowedModules(res?.allowedModules || [])
         return res
       })
       .catch(err => setConfigError(err.message || 'No se pudo cargar la configuración del panel'))
@@ -105,14 +103,13 @@ export default function Dashboard({ user }) {
       .then(res => {
         setDashboardName(res?.dashboard?.name || 'Panel General')
         setSavedWidgets((res?.dashboard?.widgets || []).map(normalizeWidget).filter(Boolean))
-        setAllowedModules(res?.allowedModules || [])
         setPanelOpen(false)
         showToast('Configuración guardada')
       })
       .catch(err => {
         setSaveError(err.message || 'No se pudo guardar la configuración')
         // 403: los permisos cambiaron desde la última carga — resincronizamos
-        // allowedModules/widgets guardados sin aplicar el intento fallido.
+        // los mosaicos guardados sin aplicar el intento fallido.
         if (err.status === 403) loadConfig()
       })
       .finally(() => setSaving(false))
@@ -194,14 +191,13 @@ export default function Dashboard({ user }) {
       .then(res => {
         setDashboardName(res?.dashboard?.name || 'Panel General')
         setSavedWidgets((res?.dashboard?.widgets || []).map(normalizeWidget).filter(Boolean))
-        setAllowedModules(res?.allowedModules || [])
         setEditMode(false)
         showToast('Configuración guardada')
       })
       .catch(err => {
         setEditSaveError(err.message || 'No se pudo guardar la configuración')
         // 403: los permisos cambiaron desde la última carga — resincronizamos
-        // allowedModules/widgets guardados sin aplicar el intento fallido.
+        // los mosaicos guardados sin aplicar el intento fallido.
         if (err.status === 403) loadConfig()
       })
       .finally(() => setEditSaving(false))
@@ -354,6 +350,7 @@ export default function Dashboard({ user }) {
                     widget={widget}
                     groupState={metricsBySeries[seriesId]}
                     onRetry={() => retrySeries(seriesId)}
+                    onNavigate={onNavigate}
                   />
                 )}
               </div>
@@ -372,8 +369,6 @@ export default function Dashboard({ user }) {
       <CreateWidgetWizard
         open={panelOpen}
         savedWidgets={savedWidgets}
-        allowedModules={allowedModules}
-        userRole={user?.role}
         saving={saving}
         saveError={saveError}
         onCancel={() => { setPanelOpen(false); setSaveError(null) }}
